@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.local
+*.log
+.DS_Store
+server/node_modules
+server/dist
+.venv
+__pycache__
+.agent
