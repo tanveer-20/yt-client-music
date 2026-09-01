@@ -7,6 +7,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
 import { getStreamUrl, searchTracks } from '../utils/api';
+import { audioDSP } from '../utils/audioEnhancer';
 import type { Track } from '../types';
 
 declare global {
@@ -44,14 +45,17 @@ export function useAudioPlayer() {
     }
   }, []);
 
-  // ── Create and configure persistent HTML5 Audio Element ──
+  // ── Create and configure persistent HTML5 Audio Element with Studio DSP ──
   useEffect(() => {
     const audio = new Audio();
     audio.preload = 'auto';
+    audio.crossOrigin = 'anonymous';
     audioRef.current = audio;
 
     const onPlay = () => {
       clearLoadingTimeout();
+      audioDSP.init(audio);
+      audioDSP.resume();
       setState('playing');
     };
 
@@ -337,6 +341,7 @@ export function useAudioPlayer() {
     if (audioRef.current) {
       audioRef.current.volume = isMuted ? 0 : volume;
       audioRef.current.muted = isMuted;
+      audioDSP.setVolume(isMuted ? 0 : volume);
     }
     if (ytPlayerRef.current && isYtReadyRef.current) {
       try {
