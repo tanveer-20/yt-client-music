@@ -5,10 +5,13 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { getStreamUrl, searchTracks } from '../utils/api';
 import { audioDSP } from '../utils/audioEnhancer';
 import type { Track } from '../types';
+
+const NativeAudio = registerPlugin<any>('NativeAudio');
 
 declare global {
   interface Window {
@@ -21,7 +24,7 @@ export function useAudioPlayer() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ytPlayerRef = useRef<any>(null);
   const isYtReadyRef = useRef(false);
-  const activeModeRef = useRef<'html5' | 'youtube'>('html5');
+  const activeModeRef = useRef<'html5' | 'youtube' | 'native'>('html5');
   const isSeekingRef = useRef(false);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryMapRef = useRef<Record<string, number>>({});
@@ -45,8 +48,56 @@ export function useAudioPlayer() {
     }
   }, []);
 
-  // ── Create and configure persistent HTML5 Audio Element with Studio DSP ──
+  // ── Native Android Audio Listener (Bit-Perfect Hardware Offload) ──
   useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let progressTimer: any = null;
+
+    const listenerPromise = NativeAudio.addListener('stateChange', (data: any) => {
+      if (data.state === 'playing') {
+        clearLoadingTimeout();
+        setState('playing');
+        if (data.duration && isFinite(data.duration)) {
+          setDuration(data.duration);
+        }
+      } else if (data.state === 'paused') {
+        clearLoadingTimeout();
+        setState('paused');
+      } else if (data.state === 'ended') {
+        clearLoadingTimeout();
+        usePlayerStore.getState().next();
+      } else if (data.state === 'error') {
+        clearLoadingTimeout();
+        const curr = usePlayerStore.getState().currentTrack;
+        if (curr) tryAlternativeTrack(curr);
+      }
+    });
+
+    progressTimer = setInterval(async () => {
+      if (usePlayerStore.getState().state === 'playing' && !isSeekingRef.current) {
+        try {
+          const res = await NativeAudio.getProgress();
+          if (res && typeof res.currentTime === 'number') {
+            setProgress(res.currentTime);
+            if (res.duration && isFinite(res.duration) && res.duration > 0) {
+              setDuration(res.duration);
+            }
+          }
+        } catch {}
+      }
+    }, 400);
+
+    return () => {
+      listenerPromise.then((handle: any) => handle && handle.remove());
+      if (progressTimer) clearInterval(progressTimer);
+    };
+  }, [clearLoadingTimeout, setDuration, setProgress, setState]);
+
+  // ── Create and configure persistent HTML5 Audio Element with Studio DSP (Web) ──
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) return;
+
     const audio = new Audio();
     audio.preload = 'auto';
     audio.crossOrigin = 'anonymous';
@@ -95,7 +146,6 @@ export function useAudioPlayer() {
     const onError = () => {
       console.warn('HTML5 Audio encountered error, falling back to YouTube engine...');
       if (activeModeRef.current === 'html5') {
-        // Switch to YouTube Iframe Player
         playViaYouTube(usePlayerStore.getState().currentTrack);
       }
     };
@@ -146,11 +196,12 @@ export function useAudioPlayer() {
     }
   }, [setState]);
 
-  // ── Auto-Fallback: Find alternative playable version of song ──
+  // ── Auto-resolve alternative audio stream if restricted ──
   const tryAlternativeTrack = useCallback(
     async (failedTrack: Track) => {
       const attempts = retryMapRef.current[failedTrack.id] || 0;
       if (attempts >= 2) {
+        console.warn(`Giving up on track ${failedTrack.title} after 2 attempts.`);
         usePlayerStore.getState().next();
         return;
       }
@@ -163,8 +214,11 @@ export function useAudioPlayer() {
 
         if (alternative) {
           console.log(`Found alternative audio stream (${alternative.id}) for ${failedTrack.title}`);
-          if (activeModeRef.current === 'html5' && audioRef.current) {
-            audioRef.current.src = getStreamUrl(alternative.id);
+          const altStreamUrl = getStreamUrl(alternative.id);
+          if (Capacitor.isNativePlatform()) {
+            NativeAudio.play({ url: altStreamUrl }).catch(() => playViaYouTube(alternative));
+          } else if (activeModeRef.current === 'html5' && audioRef.current) {
+            audioRef.current.src = altStreamUrl;
             audioRef.current.play().catch(() => playViaYouTube(alternative));
           } else {
             playViaYouTube(alternative);
@@ -267,6 +321,9 @@ export function useAudioPlayer() {
   useEffect(() => {
     if (!currentTrack) {
       clearLoadingTimeout();
+      if (Capacitor.isNativePlatform()) {
+        NativeAudio.pause().catch(() => {});
+      }
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = '';
@@ -290,10 +347,23 @@ export function useAudioPlayer() {
       }
     }, 8000);
 
-    // Primary: Load HTML5 Audio Stream
-    activeModeRef.current = 'html5';
-    if (audioRef.current) {
-      const streamUrl = getStreamUrl(currentTrack.id);
+    const streamUrl = getStreamUrl(currentTrack.id);
+
+    // Primary 1: Native Android Hardware AudioTrack Engine
+    if (Capacitor.isNativePlatform()) {
+      activeModeRef.current = 'native';
+      NativeAudio.play({ url: streamUrl })
+        .then(() => {
+          NativeAudio.setVolume({ volume: isMuted ? 0 : volume }).catch(() => {});
+        })
+        .catch((err: any) => {
+          console.warn('NativeAudio play failed, falling back to YouTube engine:', err);
+          playViaYouTube(currentTrack);
+        });
+    }
+    // Primary 2: Web Browser Studio DSP Engine
+    else if (audioRef.current) {
+      activeModeRef.current = 'html5';
       audioRef.current.src = streamUrl;
       audioRef.current.volume = isMuted ? 0 : volume;
       audioRef.current
@@ -322,6 +392,15 @@ export function useAudioPlayer() {
 
   // ── Play / Pause state sync ──
   useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      if (state === 'playing') {
+        NativeAudio.resume().catch(() => {});
+      } else if (state === 'paused') {
+        NativeAudio.pause().catch(() => {});
+      }
+      return;
+    }
+
     if (activeModeRef.current === 'html5' && audioRef.current) {
       if (state === 'playing') {
         audioRef.current.play().catch(() => {});
@@ -338,6 +417,11 @@ export function useAudioPlayer() {
 
   // ── Volume sync ──
   useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      NativeAudio.setVolume({ volume: isMuted ? 0 : volume }).catch(() => {});
+      return;
+    }
+
     if (audioRef.current) {
       audioRef.current.volume = isMuted ? 0 : volume;
       audioRef.current.muted = isMuted;
@@ -360,7 +444,10 @@ export function useAudioPlayer() {
       if (!isFinite(time)) return;
       isSeekingRef.current = true;
 
-      if (activeModeRef.current === 'html5' && audioRef.current) {
+      if (Capacitor.isNativePlatform()) {
+        NativeAudio.seek({ position: time }).catch(() => {});
+        setProgress(time);
+      } else if (activeModeRef.current === 'html5' && audioRef.current) {
         audioRef.current.currentTime = time;
         setProgress(time);
       } else if (activeModeRef.current === 'youtube' && ytPlayerRef.current && isYtReadyRef.current) {

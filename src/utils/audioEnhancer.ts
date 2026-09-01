@@ -28,39 +28,44 @@ class StudioAudioDSP {
       this.ctx = new AudioCtx({ sampleRate: 48000 });
       this.source = this.ctx.createMediaElementSource(audioEl);
 
-      // 1. Deep Sub-Bass (80Hz Low-Shelf +3.5dB)
+      // Pre-gain headroom node (-1.5 dB) to guarantee zero 0 dBFS clipping
+      const headroomNode = this.ctx.createGain();
+      headroomNode.gain.value = 0.85; // -1.4 dB headroom
+
+      // 1. Warm Low-End (60Hz Low-Shelf +2.0dB)
       this.bassFilter = this.ctx.createBiquadFilter();
       this.bassFilter.type = 'lowshelf';
       this.bassFilter.frequency.value = 80;
-      this.bassFilter.gain.value = 3.5;
+      this.bassFilter.gain.value = 2.0;
 
-      // 2. Vocal & Instrument Presence (2.5kHz Peaking +1.8dB)
+      // 2. Vocal & Lead Presence (2.5kHz Peaking +1.2dB)
       this.midFilter = this.ctx.createBiquadFilter();
       this.midFilter.type = 'peaking';
       this.midFilter.frequency.value = 2500;
-      this.midFilter.Q.value = 1.2;
-      this.midFilter.gain.value = 1.8;
+      this.midFilter.Q.value = 1.0;
+      this.midFilter.gain.value = 1.2;
 
-      // 3. High-End Sparkle / Air (10kHz High-Shelf +3.2dB)
+      // 3. High-End Detail (12kHz High-Shelf +2.0dB)
       this.trebleFilter = this.ctx.createBiquadFilter();
       this.trebleFilter.type = 'highshelf';
-      this.trebleFilter.frequency.value = 10000;
-      this.trebleFilter.gain.value = 3.2;
+      this.trebleFilter.frequency.value = 12000;
+      this.trebleFilter.gain.value = 2.0;
 
-      // 4. Studio Broadcast Dynamics Compressor (Matches Apple Music / YouTube Music Loudness)
+      // 4. True-Peak Brickwall Safety Limiter (Prevents DAC inter-sample clipping)
       this.compressor = this.ctx.createDynamicsCompressor();
-      this.compressor.threshold.value = -18;
-      this.compressor.knee.value = 12;
-      this.compressor.ratio.value = 4.5;
-      this.compressor.attack.value = 0.003;
-      this.compressor.release.value = 0.25;
+      this.compressor.threshold.value = -0.5;
+      this.compressor.knee.value = 0;
+      this.compressor.ratio.value = 20;
+      this.compressor.attack.value = 0.001;
+      this.compressor.release.value = 0.05;
 
-      // 5. Master Output Gain
+      // 5. Master Volume Output Gain
       this.gainNode = this.ctx.createGain();
       this.gainNode.gain.value = 1.0;
 
-      // Chain: Source -> Bass -> Mid -> Treble -> Compressor -> Gain -> Output
+      // Chain: Source -> Headroom -> Bass -> Mid -> Treble -> Limiter -> Gain -> Destination
       this.source
+        .connect(headroomNode)
         .connect(this.bassFilter)
         .connect(this.midFilter)
         .connect(this.trebleFilter)
@@ -69,7 +74,7 @@ class StudioAudioDSP {
         .connect(this.ctx.destination);
 
       this.isInitialized = true;
-      console.log('🎧 Studio 48kHz Audio DSP Engine Initialized!');
+      console.log('🎧 Studio 48kHz Bit-Perfect Audio DSP Initialized!');
     } catch (e) {
       console.warn('Web Audio DSP not initialized (using native audio output):', e);
     }

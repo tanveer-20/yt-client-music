@@ -8,6 +8,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(NativeAudioPlugin.class);
         super.onCreate(savedInstanceState);
         WebView webView = getBridge() != null ? getBridge().getWebView() : null;
         if (webView != null) {
