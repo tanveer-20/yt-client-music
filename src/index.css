@@ -59,6 +59,15 @@
     --theme-shadow: rgba(0, 0, 0, 0.06);
   }
 
+  html,
+  body {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
   html {
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
       'Inter', 'Segoe UI', system-ui, sans-serif;
@@ -72,8 +81,6 @@
     color: var(--theme-text-primary);
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
-    padding-top: var(--safe-top);
-    padding-bottom: var(--safe-bottom);
     transition: background-color 0.25s ease, color 0.25s ease;
   }
 
@@ -295,24 +302,28 @@
     display: flex;
     align-items: center;
     justify-content: space-around;
-    padding: 0.25rem 0.5rem;
-    padding-bottom: max(8px, var(--safe-bottom));
+    padding-top: 6px;
+    padding-bottom: max(14px, var(--safe-bottom));
+    padding-left: max(8px, var(--safe-left));
+    padding-right: max(8px, var(--safe-right));
   }
 
   .tab-item {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0.5rem 1rem;
-    border-radius: 0.75rem;
-    min-width: 64px;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 12px;
+    border-radius: 0.875rem;
+    min-width: 68px;
+    min-height: 48px;
     transition: all 0.2s ease;
     -webkit-tap-highlight-color: transparent;
   }
 
   .tab-item:active {
-    transform: scale(0.9);
+    transform: scale(0.92);
   }
 
   .tab-item-active {
@@ -386,6 +397,10 @@
 
   .pt-safe {
     padding-top: max(16px, var(--safe-top));
+  }
+
+  .safe-scroll-bottom {
+    padding-bottom: calc(7.5rem + max(14px, var(--safe-bottom)));
   }
 
   /* ── Universal Light Mode Inversions ── */

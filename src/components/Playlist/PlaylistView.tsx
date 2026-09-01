@@ -37,7 +37,7 @@ export function PlaylistListView() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="px-4 pt-4 pb-24">
+      <div className="px-4 pt-[max(1rem,env(safe-area-inset-top,0px))] safe-scroll-bottom">
         <div className="flex items-center justify-between mb-4">
           <h1 className="page-title">Library</h1>
           <button
@@ -190,7 +190,7 @@ export function PlaylistDetailView() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="px-4 pt-4 pb-24">
+      <div className="px-4 pt-[max(1rem,env(safe-area-inset-top,0px))] safe-scroll-bottom">
         {/* Back button */}
         <button
           onClick={() => setView('playlists')}

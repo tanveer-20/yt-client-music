@@ -46,6 +46,7 @@ export function NowPlayingView() {
     queueIndex,
     pause,
     resume,
+    play,
     next,
     previous,
     seek,
@@ -125,37 +126,51 @@ export function NowPlayingView() {
 
   if (!isNowPlayingOpen || !currentTrack) return null;
 
-  const isLiked = isFavorite(currentTrack.id);
+  const isLiked = currentTrack && typeof isFavorite === 'function' ? isFavorite(currentTrack.id) : false;
   const isPlaying = state === 'playing';
   const isLoading = state === 'loading';
-  const progressRatio = duration > 0 ? progress / duration : 0;
-  const upNext = queue.slice(queueIndex + 1);
+  const progressRatio = duration > 0 ? Math.max(0, Math.min(1, progress / duration)) : 0;
+  const upNext = Array.isArray(queue) ? queue.slice(queueIndex + 1) : [];
 
   const handleSeek = (ratio: number) => {
     seek(ratio * duration);
   };
 
+  const handleTogglePlay = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    if (state === 'playing') {
+      pause();
+    } else if (state === 'loading') {
+      pause();
+    } else if (state === 'error' && currentTrack) {
+      play(currentTrack);
+    } else {
+      resume();
+    }
+  };
+
   return (
     <div
-      className={`now-playing-view fixed inset-0 z-50 flex flex-col ${
-        isDraggingSheet ? '' : 'transition-transform duration-300 ease-out animate-slide-up'
-      }`}
+      className="now-playing-view fixed inset-0 z-50 flex flex-col bg-gradient-to-b from-[#181824] via-[#0e0e14] to-[#0a0a0f] text-white select-none overflow-hidden"
       style={{
         transform: sheetOffsetY > 0 ? `translateY(${sheetOffsetY}px)` : undefined,
+        transition: isDraggingSheet ? 'none' : 'transform 0.25s ease-out',
       }}
     >
-      {/* Blurred backdrop */}
-      <div
-        className="absolute inset-0 now-playing-backdrop"
-        style={{
-          backgroundImage: `url(${currentTrack.thumbnail})`,
-        }}
-      />
-      {/* Dark overlay on top of blur */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-[80px]" />
+      {/* Background artwork glow */}
+      {currentTrack.thumbnail && (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <img
+            src={currentTrack.thumbnail}
+            alt=""
+            className="w-full h-full object-cover scale-150 blur-3xl opacity-20 transform-gpu"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/60 to-[#0a0a0f]" />
+        </div>
+      )}
 
       {/* Content */}
-      <div className="relative z-10 flex flex-col h-full px-6 pt-safe">
+      <div className="relative z-10 flex flex-col h-full px-5 sm:px-6 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-[max(1.25rem,env(safe-area-inset-bottom,0px))]">
         {/* ── Grabber Handle (Dedicated drag-down trigger) ── */}
         <div
           onTouchStart={handleGrabberTouchStart}
@@ -221,19 +236,22 @@ export function NowPlayingView() {
               onTouchStart={handleArtTouchStart}
               onTouchMove={handleArtTouchMove}
               onTouchEnd={handleArtTouchEnd}
-              className="relative cursor-grab active:cursor-grabbing touch-pan-y"
+              className="relative cursor-grab active:cursor-grabbing touch-pan-y w-64 h-64 sm:w-80 sm:h-80 flex items-center justify-center"
               style={{
                 transform: `translateX(${artOffsetX}px) rotate(${artOffsetX * 0.04}deg)`,
                 transition: isSwipingArt ? 'none' : 'transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1)',
               }}
             >
               <img
-                src={currentTrack.thumbnail}
+                src={currentTrack.thumbnail || `https://i.ytimg.com/vi/${currentTrack.id}/hqdefault.jpg`}
                 alt={currentTrack.title}
                 draggable={false}
-                className={`w-full max-w-[290px] sm:max-w-[340px] aspect-square rounded-2xl sm:rounded-3xl object-cover
-                  shadow-2xl shadow-black/80 transition-all duration-500 pointer-events-none
-                  ${isPlaying ? 'scale-100' : 'scale-[0.93]'}`}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = `https://i.ytimg.com/vi/${currentTrack.id}/hqdefault.jpg`;
+                }}
+                className={`w-full h-full rounded-2xl sm:rounded-3xl object-cover bg-white/10
+                  shadow-2xl shadow-black/80 transition-all duration-300 pointer-events-none
+                  ${isPlaying ? 'scale-100' : 'scale-[0.94]'}`}
               />
             </div>
 
@@ -457,7 +475,7 @@ export function NowPlayingView() {
             <RiSkipBackFill size={32} />
           </button>
           <button
-            onClick={isPlaying ? pause : resume}
+            onClick={handleTogglePlay}
             onTouchStart={(e) => e.stopPropagation()}
             className={`btn-icon bg-white text-black w-16 h-16 rounded-full
               hover:scale-105 active:scale-95 shadow-xl shadow-black/40 ${isLoading ? 'loading-pulse' : ''}`}
@@ -488,7 +506,7 @@ export function NowPlayingView() {
         </div>
 
         {/* ── Volume ── */}
-        <div className="px-4 mb-6">
+        <div className="px-4 mb-2">
           <VolumeControl />
         </div>
       </div>

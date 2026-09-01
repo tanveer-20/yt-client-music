@@ -19,7 +19,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { isQueueOpen } = useUIStore();
 
   return (
-    <div className="h-dvh w-dvw flex flex-col app-shell overflow-hidden">
+    <div className="h-full w-full flex flex-col app-shell overflow-hidden select-none">
       {/* ── Main area ── */}
       <div className="flex flex-1 min-h-0">
         {/* Sidebar (desktop only) */}

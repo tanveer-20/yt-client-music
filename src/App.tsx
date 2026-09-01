@@ -14,6 +14,8 @@ import { useSettingsStore } from './stores/settingsStore';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+
 function AppContent() {
   const { currentView } = useUIStore();
 
@@ -45,8 +47,10 @@ export default function App() {
   }, []);
 
   return (
-    <AppLayout>
-      <AppContent />
-    </AppLayout>
+    <ErrorBoundary>
+      <AppLayout>
+        <AppContent />
+      </AppLayout>
+    </ErrorBoundary>
   );
 }

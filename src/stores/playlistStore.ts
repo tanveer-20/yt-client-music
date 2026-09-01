@@ -99,10 +99,10 @@ export const usePlaylistStore = create<PlaylistStore>()(
       },
 
       toggleFavorite: (track: Track) => {
-        const { favorites } = get();
-        const exists = favorites.some((t) => t.id === track.id);
+        const favorites = get().favorites || [];
+        const exists = favorites.some((t) => t && t.id === track.id);
         const newFavorites = exists
-          ? favorites.filter((t) => t.id !== track.id)
+          ? favorites.filter((t) => t && t.id !== track.id)
           : [track, ...favorites];
 
         set({ favorites: newFavorites });
@@ -110,7 +110,8 @@ export const usePlaylistStore = create<PlaylistStore>()(
       },
 
       isFavorite: (trackId: string) => {
-        return get().favorites.some((t) => t.id === trackId);
+        const favorites = get().favorites || [];
+        return favorites.some((t) => t && t.id === trackId);
       },
     }),
     { name: 'yt-music-playlists' }

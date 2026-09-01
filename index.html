@@ -10,13 +10,18 @@
     <meta name="apple-mobile-web-app-title" content="YT Music" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>YT Music</title>
+    <!-- Pre-warm YouTube Audio Streaming Network -->
+    <link rel="preconnect" href="https://www.youtube.com" />
+    <link rel="preconnect" href="https://www.google.com" />
+    <link rel="preconnect" href="https://i.ytimg.com" />
+    <script src="https://www.youtube.com/iframe_api"></script>
     <style>
       /* Prevent FOUC */
       html { background: #000; }
     </style>
   </head>
   <body class="antialiased overflow-hidden">
-    <div id="root" class="h-dvh w-dvw overflow-hidden"></div>
+    <div id="root" class="h-full w-full overflow-hidden"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

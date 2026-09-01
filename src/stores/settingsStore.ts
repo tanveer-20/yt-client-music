@@ -28,6 +28,11 @@ interface SettingsStore {
   autoPlaySimilar: boolean;
   normalizeVolume: boolean;
 
+  // ── Server & Network ──
+  serverUrl: string;
+  serverStatus: 'connected' | 'disconnected' | 'checking';
+  serverPingMs: number | null;
+
   // ── Technical Info & Dialogs ──
   currentTechnicalDetails: TechnicalDetails | null;
   isTrackDetailsOpen: boolean;
@@ -38,6 +43,9 @@ interface SettingsStore {
   setAudioQuality: (quality: AudioQuality) => void;
   setAutoPlaySimilar: (enabled: boolean) => void;
   setNormalizeVolume: (enabled: boolean) => void;
+  setServerUrl: (url: string) => void;
+  setServerStatus: (status: 'connected' | 'disconnected' | 'checking', pingMs?: number | null) => void;
+  checkConnection: (customUrl?: string) => Promise<{ ok: boolean; message: string; pingMs?: number }>;
   setTechnicalDetails: (details: TechnicalDetails | null) => void;
   setTrackDetailsOpen: (open: boolean) => void;
   setIsLoadingDetails: (loading: boolean) => void;
@@ -64,6 +72,9 @@ export const useSettingsStore = create<SettingsStore>()(
       audioQuality: 'high',
       autoPlaySimilar: true,
       normalizeVolume: false,
+      serverUrl: '',
+      serverStatus: 'disconnected',
+      serverPingMs: null,
       currentTechnicalDetails: null,
       isTrackDetailsOpen: false,
       isLoadingDetails: false,
@@ -76,6 +87,46 @@ export const useSettingsStore = create<SettingsStore>()(
       setAudioQuality: (audioQuality) => set({ audioQuality }),
       setAutoPlaySimilar: (autoPlaySimilar) => set({ autoPlaySimilar }),
       setNormalizeVolume: (normalizeVolume) => set({ normalizeVolume }),
+      setServerUrl: (serverUrl) => set({ serverUrl }),
+      setServerStatus: (serverStatus, serverPingMs = null) => set({ serverStatus, serverPingMs }),
+
+      checkConnection: async (customUrl?: string) => {
+        const url = (customUrl !== undefined ? customUrl : get().serverUrl).trim();
+        let targetBase = url ? url.replace(/\/+$/, '') : '';
+        if (targetBase && !targetBase.endsWith('/api')) {
+          targetBase = `${targetBase}/api`;
+        }
+        const endpoint = targetBase ? `${targetBase}/health` : '/api/health';
+
+        set({ serverStatus: 'checking' });
+        const start = Date.now();
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 6000);
+
+          const res = await fetch(endpoint, { signal: controller.signal });
+          clearTimeout(timeout);
+
+          const pingMs = Date.now() - start;
+          const contentType = res.headers.get('content-type') || '';
+
+          if (res.ok && contentType.includes('application/json')) {
+            const data = await res.json();
+            if (data.status === 'ok') {
+              set({ serverStatus: 'connected', serverPingMs: pingMs });
+              return { ok: true, message: `Connected (${pingMs}ms)`, pingMs };
+            }
+          }
+
+          set({ serverStatus: 'disconnected', serverPingMs: null });
+          return { ok: false, message: `Server replied with status ${res.status}` };
+        } catch (err: any) {
+          set({ serverStatus: 'disconnected', serverPingMs: null });
+          const msg = err.name === 'AbortError' ? 'Connection timed out' : (err.message || 'Cannot reach server');
+          return { ok: false, message: msg };
+        }
+      },
+
       setTechnicalDetails: (currentTechnicalDetails) => set({ currentTechnicalDetails }),
       setTrackDetailsOpen: (isTrackDetailsOpen) => set({ isTrackDetailsOpen }),
       setIsLoadingDetails: (isLoadingDetails) => set({ isLoadingDetails }),
@@ -87,10 +138,13 @@ export const useSettingsStore = create<SettingsStore>()(
         audioQuality: state.audioQuality,
         autoPlaySimilar: state.autoPlaySimilar,
         normalizeVolume: state.normalizeVolume,
+        serverUrl: state.serverUrl,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
           applyThemeToDOM(state.theme);
+          // Auto-check connection on load
+          state.checkConnection().catch(() => {});
         }
       },
     }

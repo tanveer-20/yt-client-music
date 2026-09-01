@@ -9,3 +9,11 @@ server/dist
 .venv
 __pycache__
 .agent
+.idea/
+bugs/
+bug*.jpg
+*.tsbuildinfo
+android/.gradle/
+android/build/
+android/app/build/
+android/.idea/

@@ -53,23 +53,36 @@ export function TabBar() {
   const { currentView, setView } = useUIStore();
 
   return (
-    <nav className="tab-bar border-t border-white/[0.06]">
-      {tabs.map((tab) => {
-        const isActive =
-          currentView === tab.view ||
-          (tab.view === 'playlists' && currentView === 'playlist-detail');
+    <nav className="tab-bar border-t border-white/[0.08]" role="navigation" aria-label="Bottom Navigation">
+      <div className="flex items-center justify-around w-full max-w-md mx-auto">
+        {tabs.map((tab) => {
+          const isActive =
+            currentView === tab.view ||
+            (tab.view === 'playlists' && currentView === 'playlist-detail');
 
-        return (
-          <button
-            key={tab.view}
-            onClick={() => setView(tab.view)}
-            className={`tab-item ${isActive ? 'tab-item-active' : 'tab-item-inactive'}`}
-          >
-            {isActive ? tab.activeIcon : tab.icon}
-            <span className="text-[10px] font-medium">{tab.label}</span>
-          </button>
-        );
-      })}
+          return (
+            <button
+              key={tab.view}
+              onClick={() => setView(tab.view)}
+              className={`tab-item group relative transition-all duration-200 ${
+                isActive ? 'tab-item-active font-semibold' : 'tab-item-inactive'
+              }`}
+              aria-label={tab.label}
+              aria-current={isActive ? 'page' : undefined}
+            >
+              <div className="relative flex items-center justify-center">
+                {isActive ? tab.activeIcon : tab.icon}
+              </div>
+              <span className="text-[11px] leading-tight mt-0.5 tracking-tight font-medium">
+                {tab.label}
+              </span>
+              {isActive && (
+                <span className="w-1 h-1 rounded-full bg-brand-500 mt-0.5 transition-all duration-300" />
+              )}
+            </button>
+          );
+        })}
+      </div>
     </nav>
   );
 }

@@ -1,10 +1,11 @@
 /**
  * Stream route — GET /api/stream/:videoId
- * Proxies the audio stream from YouTube to the client.
- * Supports Range requests for seeking.
+ * Proxies the audio stream from YouTube to the client with high-performance
+ * Node stream piping, backpressure handling, and HTTP 206 Range seeking.
  */
 
 import { Router, type Request, type Response } from 'express';
+import { Readable } from 'node:stream';
 import { getStreamUrl } from '../services/youtube.js';
 import { streamCache } from '../utils/cache.js';
 
@@ -14,6 +15,18 @@ interface CachedStream {
   url: string;
   contentType: string;
   headers?: Record<string, string>;
+}
+
+function buildProxyHeaders(req: Request, streamInfo?: { headers?: Record<string, string> }): Record<string, string> {
+  const headers: Record<string, string> = {
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    ...(streamInfo?.headers || {}),
+  };
+  if (req.headers.range) {
+    headers['Range'] = req.headers.range;
+  }
+  return headers;
 }
 
 router.get('/:videoId', async (req: Request, res: Response): Promise<void> => {
@@ -32,50 +45,32 @@ router.get('/:videoId', async (req: Request, res: Response): Promise<void> => {
       console.log(`  ↳ Fetching stream URL for: ${videoId}`);
       const result = await getStreamUrl(videoId);
       streamInfo = { url: result.url, contentType: result.contentType, headers: result.headers };
-      streamCache.set(cacheKey, streamInfo, 4 * 60 * 60 * 1000); // 4 hours
+      streamCache.set(cacheKey, streamInfo, 4 * 60 * 60 * 1000);
     } else {
       console.log(`  ↳ Stream cache hit for: ${videoId}`);
     }
 
-    // Build headers for the proxy request
-    const proxyHeaders: Record<string, string> = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      ...(streamInfo.headers || {}),
-    };
-
-    // Forward Range header for seeking
-    if (req.headers.range) {
-      proxyHeaders['Range'] = req.headers.range;
-    }
+    const proxyHeaders = buildProxyHeaders(req, streamInfo);
 
     // Fetch the audio stream from YouTube
-    const upstream = await fetch(streamInfo.url, { headers: proxyHeaders });
+    let upstream = await fetch(streamInfo.url, { headers: proxyHeaders });
 
     if (!upstream.ok && upstream.status !== 206) {
       // Stream URL might have expired, clear cache and retry once
       streamCache.delete(cacheKey);
-      console.log(`  ↳ Stream URL expired for ${videoId}, retrying...`);
+      console.log(`  ↳ Stream URL expired for ${videoId}, refreshing...`);
 
       const retryResult = await getStreamUrl(videoId);
       streamInfo = { url: retryResult.url, contentType: retryResult.contentType, headers: retryResult.headers };
       streamCache.set(cacheKey, streamInfo, 4 * 60 * 60 * 1000);
 
-      const retryProxyHeaders: Record<string, string> = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        ...(retryResult.headers || {}),
-      };
-      if (req.headers.range) {
-        retryProxyHeaders['Range'] = req.headers.range;
-      }
+      const retryProxyHeaders = buildProxyHeaders(req, streamInfo);
+      upstream = await fetch(streamInfo.url, { headers: retryProxyHeaders });
 
-      const retryUpstream = await fetch(streamInfo.url, { headers: retryProxyHeaders });
-      if (!retryUpstream.ok && retryUpstream.status !== 206) {
+      if (!upstream.ok && upstream.status !== 206) {
         res.status(502).json({ error: 'Failed to fetch audio stream' });
         return;
       }
-
-      sendStream(req, retryUpstream, streamInfo.contentType, res);
-      return;
     }
 
     sendStream(req, upstream, streamInfo.contentType, res);
@@ -89,18 +84,14 @@ router.get('/:videoId', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * Pipe an upstream fetch Response into the Express response with proper headers.
+ * Pipe upstream web stream directly to Express response with automatic backpressure.
  */
 function sendStream(req: Request, upstream: globalThis.Response, contentType: string, res: Response): void {
-  // Set response status (200 or 206 for partial content)
   res.status(upstream.status);
-
-  // Set headers
   res.setHeader('Content-Type', contentType);
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Cache-Control', 'public, max-age=3600');
 
-  // Forward relevant headers from upstream
   const headersToForward = ['content-length', 'content-range', 'content-encoding'];
   for (const header of headersToForward) {
     const value = upstream.headers.get(header);
@@ -109,51 +100,22 @@ function sendStream(req: Request, upstream: globalThis.Response, contentType: st
     }
   }
 
-  // CORS headers for audio playback
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Range');
   res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
 
-  if (req.method === 'HEAD') {
+  if (req.method === 'HEAD' || !upstream.body) {
     res.end();
     return;
   }
 
-  // Pipe the stream
-  if (upstream.body) {
-    const reader = upstream.body.getReader();
+  // Use Node Readable.fromWeb for automatic backpressure management
+  const nodeStream = Readable.fromWeb(upstream.body as any);
+  nodeStream.pipe(res);
 
-    const pump = async () => {
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            res.end();
-            break;
-          }
-          if (!res.writableEnded) {
-            res.write(Buffer.from(value));
-          } else {
-            reader.cancel();
-            break;
-          }
-        }
-      } catch (err) {
-        if (!res.writableEnded) {
-          res.end();
-        }
-      }
-    };
-
-    // Handle client disconnect
-    res.on('close', () => {
-      reader.cancel().catch(() => {});
-    });
-
-    pump();
-  } else {
-    res.end();
-  }
+  res.on('close', () => {
+    nodeStream.destroy();
+  });
 }
 
 export default router;

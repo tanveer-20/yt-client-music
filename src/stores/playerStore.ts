@@ -8,6 +8,7 @@ import { persist } from 'zustand/middleware';
 import type { Track, RepeatMode, PlayerState } from '../types';
 import { getSuggestions } from '../utils/api';
 import { useSettingsStore } from './settingsStore';
+import { useUIStore } from './uiStore';
 
 interface PlayerStore {
   // ── Playback ──
@@ -62,6 +63,12 @@ function shuffle<T>(arr: T[]): T[] {
   return result;
 }
 
+function appendHistory(history: Track[], track: Track | null): Track[] {
+  if (!track) return history;
+  const filtered = history.filter((t) => t.id !== track.id);
+  return [track, ...filtered].slice(0, 50);
+}
+
 export const usePlayerStore = create<PlayerStore>()(
   persist(
     (set, get) => ({
@@ -82,10 +89,8 @@ export const usePlayerStore = create<PlayerStore>()(
       // ── Playback Actions ──
 
       play: (track) => {
-        const { currentTrack, history } = get();
-        const newHistory = currentTrack
-          ? [currentTrack, ...history].slice(0, 50)
-          : history;
+        const { history } = get();
+        const newHistory = appendHistory(history, track);
 
         set({
           currentTrack: track,
@@ -144,12 +149,11 @@ export const usePlayerStore = create<PlayerStore>()(
           }
         }
 
-        const newHistory = currentTrack
-          ? [currentTrack, ...history].slice(0, 50)
-          : history;
+        const targetTrack = queue[nextIndex];
+        const newHistory = appendHistory(history, targetTrack);
 
         set({
-          currentTrack: queue[nextIndex],
+          currentTrack: targetTrack,
           queueIndex: nextIndex,
           state: 'loading',
           progress: 0,
@@ -159,7 +163,7 @@ export const usePlayerStore = create<PlayerStore>()(
       },
 
       previous: () => {
-        const { progress, history, queue, queueIndex, currentTrack } = get();
+        const { progress, history, queue, queueIndex } = get();
 
         // If more than 3 seconds in, restart the track
         if (progress > 3) {
@@ -170,12 +174,11 @@ export const usePlayerStore = create<PlayerStore>()(
         // Try going back in queue
         if (queueIndex > 0) {
           const prevIndex = queueIndex - 1;
-          const newHistory = currentTrack
-            ? [currentTrack, ...history].slice(0, 50)
-            : history;
+          const targetTrack = queue[prevIndex];
+          const newHistory = appendHistory(history, targetTrack);
 
           set({
-            currentTrack: queue[prevIndex],
+            currentTrack: targetTrack,
             queueIndex: prevIndex,
             state: 'loading',
             progress: 0,
@@ -291,16 +294,15 @@ export const usePlayerStore = create<PlayerStore>()(
 
       playQueue: (tracks, startIndex = 0) => {
         if (tracks.length === 0) return;
-        const { currentTrack, history } = get();
-        const newHistory = currentTrack
-          ? [currentTrack, ...history].slice(0, 50)
-          : history;
+        const targetTrack = tracks[startIndex] || tracks[0];
+        const { history } = get();
+        const newHistory = appendHistory(history, targetTrack);
 
         set({
           queue: tracks,
           originalQueue: tracks,
           queueIndex: startIndex,
-          currentTrack: tracks[startIndex],
+          currentTrack: targetTrack,
           state: 'loading',
           progress: 0,
           duration: 0,

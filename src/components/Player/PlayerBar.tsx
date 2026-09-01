@@ -26,15 +26,16 @@ export function PlayerBar() {
     state,
     progress,
     duration,
-    repeatMode,
-    isShuffled,
     pause,
     resume,
+    play,
     next,
     previous,
-    seek,
+    isShuffled,
+    repeatMode,
     toggleShuffle,
     cycleRepeat,
+    seek,
   } = usePlayerStore();
 
   const { toggleQueue, toggleNowPlaying } = useUIStore();
@@ -45,6 +46,19 @@ export function PlayerBar() {
 
   const handleSeek = (ratio: number) => {
     seek(ratio * duration);
+  };
+
+  const handleTogglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (state === 'playing') {
+      pause();
+    } else if (state === 'loading') {
+      pause();
+    } else if (state === 'error' && currentTrack) {
+      play(currentTrack);
+    } else {
+      resume();
+    }
   };
 
   if (!currentTrack) {
@@ -65,7 +79,7 @@ export function PlayerBar() {
         />
       </div>
 
-      <div className="px-4 py-2 md:py-3 flex items-center gap-3 md:gap-4">
+      <div className="flex items-center justify-between px-4 py-2.5 max-w-7xl mx-auto gap-3">
         {/* ── Track Info (clickable to expand) ── */}
         <button
           onClick={toggleNowPlaying}
@@ -74,14 +88,14 @@ export function PlayerBar() {
           <img
             src={currentTrack.thumbnail}
             alt={currentTrack.title}
-            className="w-11 h-11 md:w-12 md:h-12 rounded-xl object-cover shadow-lg flex-shrink-0"
+            className="w-12 h-12 rounded-xl object-cover flex-shrink-0 shadow-md shadow-black/40"
           />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-white line-clamp-1">
               {currentTrack.title}
             </p>
-            <p className="text-xs text-white/50 line-clamp-1">
-              {currentTrack.artist}
+            <p className={`text-xs line-clamp-1 ${state === 'error' ? 'text-rose-400 font-medium' : 'text-white/50'}`}>
+              {state === 'error' ? 'Retrying audio...' : currentTrack.artist}
             </p>
           </div>
         </button>
@@ -92,7 +106,7 @@ export function PlayerBar() {
             <RiSkipBackFill size={20} />
           </button>
           <button
-            onClick={isPlaying ? pause : resume}
+            onClick={handleTogglePlay}
             className={`btn-icon bg-white text-black rounded-full ${isLoading ? 'loading-pulse' : ''}`}
           >
             {isPlaying ? <RiPauseFill size={22} /> : <RiPlayFill size={22} />}
@@ -117,12 +131,13 @@ export function PlayerBar() {
               <RiSkipBackFill size={20} />
             </button>
             <button
-              onClick={isPlaying ? pause : resume}
-              className={`btn-icon bg-white text-black rounded-full hover:scale-105 
-                ${isLoading ? 'loading-pulse' : ''}`}
+              onClick={handleTogglePlay}
+              className={`btn-icon bg-white text-black rounded-full hover:scale-105 active:scale-95 shadow-lg shadow-black/30 ${
+                isLoading ? 'loading-pulse' : ''
+              }`}
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >
-              {isPlaying ? <RiPauseFill size={24} /> : <RiPlayFill size={24} />}
+              {isPlaying ? <RiPauseFill size={20} /> : <RiPlayFill size={20} />}
             </button>
             <button onClick={next} className="btn-ghost" aria-label="Next">
               <RiSkipForwardFill size={20} />

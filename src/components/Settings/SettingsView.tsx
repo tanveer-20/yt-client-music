@@ -1,5 +1,5 @@
 /**
- * SettingsView — user preferences, themes, audio quality, and cache controls.
+ * SettingsView — user preferences, themes, audio quality, server connection, and cache controls.
  */
 
 import { useState } from 'react';
@@ -10,10 +10,12 @@ import {
   RiSoundModuleLine,
   RiInfinityLine,
   RiDeleteBinLine,
-  RiInformationLine,
   RiCheckLine,
   RiVolumeUpLine,
   RiServerLine,
+  RiWifiLine,
+  RiRefreshLine,
+  RiInformationLine,
 } from 'react-icons/ri';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { usePlaylistStore } from '../../stores/playlistStore';
@@ -30,14 +32,37 @@ export function SettingsView() {
     setAutoPlaySimilar,
     normalizeVolume,
     setNormalizeVolume,
+    serverUrl,
+    setServerUrl,
+    serverStatus,
+    serverPingMs,
+    checkConnection,
   } = useSettingsStore();
 
   const { clearQueue } = usePlayerStore();
   const [clearedMessage, setClearedMessage] = useState<string | null>(null);
+  const [inputUrl, setInputUrl] = useState(serverUrl);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
 
   const showClearedToast = (msg: string) => {
     setClearedMessage(msg);
     setTimeout(() => setClearedMessage(null), 2500);
+  };
+
+  const handleSaveAndTestServer = async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    const cleaned = inputUrl.trim();
+    setServerUrl(cleaned);
+
+    const res = await checkConnection(cleaned);
+    setTestResult({ ok: res.ok, message: res.message });
+    setIsTesting(false);
+
+    if (res.ok) {
+      showClearedToast('Connected to server successfully!');
+    }
   };
 
   const handleClearCache = () => {
@@ -89,16 +114,105 @@ export function SettingsView() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="px-4 pt-4 pb-28 max-w-2xl mx-auto">
+      <div className="px-4 pt-[max(1rem,env(safe-area-inset-top,0px))] safe-scroll-bottom max-w-2xl mx-auto">
         <h1 className="page-title mb-6">Settings</h1>
 
         {/* Toast */}
         {clearedMessage && (
-          <div className="mb-4 p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-sm flex items-center gap-2 animate-fade-in">
+          <div className="mb-4 p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-sm flex items-center gap-2 animate-fade-in">
             <RiCheckLine size={18} />
             {clearedMessage}
           </div>
         )}
+
+        {/* ── Section: Streaming Server & Network ── */}
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-3 px-1">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-white/40">
+              Streaming Server & Network
+            </h2>
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  serverStatus === 'connected'
+                    ? 'bg-emerald-400 animate-pulse'
+                    : serverStatus === 'checking'
+                    ? 'bg-amber-400 animate-pulse'
+                    : 'bg-rose-500'
+                }`}
+              />
+              <span
+                className={`text-xs font-semibold ${
+                  serverStatus === 'connected'
+                    ? 'text-emerald-400'
+                    : serverStatus === 'checking'
+                    ? 'text-amber-400'
+                    : 'text-rose-400'
+                }`}
+              >
+                {serverStatus === 'connected'
+                  ? `Connected (${serverPingMs ?? 0}ms)`
+                  : serverStatus === 'checking'
+                  ? 'Checking...'
+                  : 'Server Offline / Direct Mode'}
+              </span>
+            </div>
+          </div>
+
+          <div className="card p-4 sm:p-5 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-white/60 mb-2">
+                Backend Server URL
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={inputUrl}
+                  onChange={(e) => setInputUrl(e.target.value)}
+                  placeholder="e.g. http://192.168.1.50:3001"
+                  className="search-bar text-sm flex-1 py-2.5 px-3.5 font-mono"
+                />
+                <button
+                  onClick={handleSaveAndTestServer}
+                  disabled={isTesting}
+                  className="btn-primary py-2.5 px-5 text-xs sm:text-sm flex items-center justify-center gap-2 shrink-0"
+                >
+                  <RiRefreshLine size={16} className={isTesting ? 'animate-spin' : ''} />
+                  {isTesting ? 'Testing...' : 'Save & Test'}
+                </button>
+              </div>
+            </div>
+
+            {testResult && (
+              <div
+                className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                  testResult.ok
+                    ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'
+                    : 'bg-rose-500/10 border border-rose-500/20 text-rose-300'
+                }`}
+              >
+                {testResult.ok ? <RiCheckLine size={16} /> : <RiInformationLine size={16} />}
+                <span>{testResult.message}</span>
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-white/[0.06] text-xs text-white/40 space-y-1.5 leading-relaxed">
+              <p className="font-semibold text-white/60 flex items-center gap-1.5">
+                <RiWifiLine size={14} className="text-brand-400" />
+                How to connect your phone APK:
+              </p>
+              <p>
+                1. On your PC terminal, run <code className="text-white/80 bg-white/[0.08] px-1 py-0.5 rounded">npm run server</code>.
+              </p>
+              <p>
+                2. Make sure your phone and PC are connected to the <strong>same Wi-Fi network</strong>.
+              </p>
+              <p>
+                3. Enter your PC's Local IP address above (e.g. <code className="text-white/80 bg-white/[0.08] px-1 py-0.5 rounded">http://192.168.x.x:3001</code>) and tap <strong>Save & Test</strong>.
+              </p>
+            </div>
+          </div>
+        </section>
 
         {/* ── Section: Appearance / Theme ── */}
         <section className="mb-8">
@@ -284,22 +398,21 @@ export function SettingsView() {
           </div>
         </section>
 
-        {/* ── Section: About ── */}
+        {/* ── Section: Device & Build Info ── */}
         <section className="card p-5">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center">
               <RiServerLine size={18} />
             </div>
             <div>
-              <p className="text-sm font-bold text-white">Personal Server Active</p>
-              <p className="text-xs text-emerald-400 font-medium flex items-center gap-1.5 mt-0.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                Audio Proxy & yt-dlp Core Online
+              <p className="text-sm font-bold text-white">YT Music · Android Edition</p>
+              <p className="text-xs text-white/50 font-medium mt-0.5">
+                Optimized for Android 14/15 Edge-to-Edge & OLED Displays
               </p>
             </div>
           </div>
           <p className="text-xs text-white/40 mt-3 leading-relaxed">
-            YT Music Client · Built for private streaming (&lt;50 users). Packaged for high-fidelity Android APK and modern Web.
+            High-fidelity YouTube audio streamer with AAC 256kbps capability, dynamic safe area adaptation, and low-latency proxy streaming.
           </p>
         </section>
       </div>

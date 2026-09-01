@@ -20,7 +20,7 @@ export function HomePage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="px-4 pt-4 pb-24">
+      <div className="px-4 pt-[max(1rem,env(safe-area-inset-top,0px))] safe-scroll-bottom">
         {/* Header */}
         <h1 className="page-title mb-6">{greeting}</h1>
 
@@ -75,14 +75,16 @@ export function HomePage() {
           <section className="mb-8">
             <h2 className="section-header">Recently Played</h2>
             <div className="space-y-0.5">
-              {history.slice(0, 10).map((track, i) => (
-                <TrackCard
-                  key={`${track.id}-${i}`}
-                  track={track}
-                  index={i}
-                  tracks={history.slice(0, 10)}
-                />
-              ))}
+              {Array.from(new Map(history.map((t) => [t.id, t])).values())
+                .slice(0, 10)
+                .map((track, i, arr) => (
+                  <TrackCard
+                    key={`history-${track.id}-${i}`}
+                    track={track}
+                    index={i}
+                    tracks={arr}
+                  />
+                ))}
             </div>
           </section>
         )}

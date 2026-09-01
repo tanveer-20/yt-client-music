@@ -24,11 +24,7 @@ export interface TrackInfo extends Track {
   channel?: string;
 }
 
-export interface StreamResult {
-  url: string;
-  format: string;
-  contentType: string;
-}
+
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -146,40 +142,55 @@ async function searchYouTubeFast(query: string, limit = 10): Promise<Track[]> {
 
   const data = (await res.json()) as any;
   const sections =
-    data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+    data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents ||
+    data.contents?.sectionListRenderer?.contents ||
+    [];
 
   const tracks: Track[] = [];
+  const seenIds = new Set<string>();
+
+  function extractItem(item: any) {
+    const v = item.videoRenderer || item.compactVideoRenderer;
+    if (v && v.videoId && !seenIds.has(v.videoId)) {
+      seenIds.add(v.videoId);
+      const title = v.title?.runs?.[0]?.text || v.title?.simpleText || 'Unknown';
+      const artist =
+        v.ownerText?.runs?.[0]?.text ||
+        v.longBylineText?.runs?.[0]?.text ||
+        v.shortBylineText?.runs?.[0]?.text ||
+        'Unknown Artist';
+
+      const thumbs = v.thumbnail?.thumbnails || [];
+      const thumbUrl = thumbs.length > 0 ? thumbs[thumbs.length - 1].url : `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`;
+      const durationText = v.lengthText?.simpleText || v.lengthText?.accessibility?.accessibilityData?.label;
+      const duration = parseDurationText(durationText);
+
+      tracks.push({
+        id: v.videoId,
+        title,
+        artist,
+        thumbnail: thumbUrl,
+        duration,
+      });
+    }
+
+    if (item.shelfRenderer) {
+      const shelfItems =
+        item.shelfRenderer.content?.verticalListRenderer?.items ||
+        item.shelfRenderer.content?.expandedShelfContentsRenderer?.items ||
+        [];
+      for (const si of shelfItems) {
+        extractItem(si);
+        if (tracks.length >= limit) return;
+      }
+    }
+  }
 
   for (const s of sections) {
     const items = s.itemSectionRenderer?.contents || [];
     for (const item of items) {
-      const v = item.videoRenderer;
-      if (v && v.videoId) {
-        const title = v.title?.runs?.[0]?.text || 'Unknown';
-        const artist =
-          v.ownerText?.runs?.[0]?.text ||
-          v.longBylineText?.runs?.[0]?.text ||
-          v.shortBylineText?.runs?.[0]?.text ||
-          'Unknown Artist';
-
-        // Select highest quality thumbnail
-        const thumbs = v.thumbnail?.thumbnails || [];
-        const thumbUrl = thumbs.length > 0 ? thumbs[thumbs.length - 1].url : `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`;
-        const durationText = v.lengthText?.simpleText || v.lengthText?.accessibility?.accessibilityData?.label;
-        const duration = parseDurationText(durationText);
-
-        tracks.push({
-          id: v.videoId,
-          title,
-          artist,
-          thumbnail: thumbUrl,
-          duration,
-        });
-
-        if (tracks.length >= limit) {
-          return tracks;
-        }
-      }
+      extractItem(item);
+      if (tracks.length >= limit) return tracks;
     }
   }
 

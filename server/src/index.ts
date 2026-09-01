@@ -69,7 +69,22 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   });
 });
 
-// ─── Start ───────────────────────────────────────────────────
+import os from 'node:os';
+
+function getLocalIpAddresses(): string[] {
+  const interfaces = os.networkInterfaces();
+  const addresses: string[] = [];
+
+  for (const name of Object.keys(interfaces)) {
+    for (const net of interfaces[name] || []) {
+      // Skip internal (i.e. 127.0.0.1) and non-ipv4 addresses
+      if (net.family === 'IPv4' && !net.internal) {
+        addresses.push(net.address);
+      }
+    }
+  }
+  return addresses;
+}
 
 async function start() {
   // Check yt-dlp availability
@@ -89,9 +104,21 @@ async function start() {
     console.error('');
   }
 
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
+    const localIps = getLocalIpAddresses();
     console.log('');
-    console.log(`🎵 YT Music Server running on http://localhost:${PORT}`);
+    console.log('╔══════════════════════════════════════════════════════════╗');
+    console.log('║  🎵  YT Music Streaming Server Running                   ║');
+    console.log('╚══════════════════════════════════════════════════════════╝');
+    console.log('');
+    console.log(`  💻 PC / Localhost:    http://localhost:${PORT}`);
+    if (localIps.length > 0) {
+      console.log('');
+      console.log('  📱 Phone APK Connection URLs (Enter in Settings):');
+      for (const ip of localIps) {
+        console.log(`     👉 http://${ip}:${PORT}`);
+      }
+    }
     console.log('');
     console.log('  Endpoints:');
     console.log(`    GET /api/health`);
