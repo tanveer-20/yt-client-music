@@ -349,10 +349,13 @@ export function useAudioPlayer() {
 
     const streamUrl = getStreamUrl(currentTrack.id);
 
-    // Primary 1: Native Android Hardware AudioTrack Engine
+    // Primary 1: Native Android Media3 ExoPlayer + MBDRC Studio Engine
     if (Capacitor.isNativePlatform()) {
       activeModeRef.current = 'native';
-      NativeAudio.play({ url: streamUrl })
+      NativeAudio.play({
+        url: streamUrl,
+        loudnessDb: (currentTrack as any).loudnessDb ?? 0,
+      })
         .then(() => {
           NativeAudio.setVolume({ volume: isMuted ? 0 : volume }).catch(() => {});
         })

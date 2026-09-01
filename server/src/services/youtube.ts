@@ -375,34 +375,46 @@ export interface StreamResult {
   url: string;
   format: string;
   contentType: string;
+  loudnessDb?: number;
   headers?: Record<string, string>;
 }
 
 /**
  * Get the direct audio stream URL for a video in a single fast yt-dlp call.
- * Prefers m4a (AAC) for maximum quality and iOS compatibility, falls back to best available audio.
+ * Prioritizes 48kHz Opus (itag 251) for bit-perfect hardware DAC decoding.
  */
 export async function getStreamUrl(videoId: string): Promise<StreamResult> {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
-  const formatSelector = 'bestaudio[acodec=opus]/bestaudio/best';
+  const formatSelector = '251/bestaudio[acodec=opus]/bestaudio/best';
 
   const stdout = await runYtDlp([
     '-f', formatSelector,
     '--dump-json',
     '--no-download',
     '--no-warnings',
+    '--extractor-args', 'youtube:player_client=android,web_remix',
     url,
   ]);
 
   const data = JSON.parse(stdout) as Record<string, unknown>;
   const streamUrl = (data.url as string) || '';
-  const format = (data.ext as string) || 'm4a';
+  const format = (data.ext as string) || 'webm';
   const httpHeaders = (data.http_headers as Record<string, string>) || {};
+
+  // Extract loudnessDb from player_response if available
+  let loudnessDb: number | undefined;
+  try {
+    const playerResponse = (data.player_response as any) || {};
+    const audioConfig = playerResponse.playerConfig?.audioConfig;
+    if (typeof audioConfig?.loudnessDb === 'number') {
+      loudnessDb = audioConfig.loudnessDb;
+    }
+  } catch {}
 
   const contentTypeMap: Record<string, string> = {
     m4a: 'audio/mp4',
     mp4: 'audio/mp4',
-    webm: 'audio/webm',
+    webm: 'audio/webm; codecs="opus"',
     mp3: 'audio/mpeg',
     ogg: 'audio/ogg',
     opus: 'audio/opus',
@@ -411,7 +423,8 @@ export async function getStreamUrl(videoId: string): Promise<StreamResult> {
   return {
     url: streamUrl,
     format,
-    contentType: contentTypeMap[format] || 'audio/mp4',
+    contentType: contentTypeMap[format] || 'audio/webm; codecs="opus"',
+    loudnessDb,
     headers: httpHeaders,
   };
 }

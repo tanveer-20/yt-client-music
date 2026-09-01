@@ -14,6 +14,7 @@ const router = Router();
 interface CachedStream {
   url: string;
   contentType: string;
+  loudnessDb?: number;
   headers?: Record<string, string>;
 }
 
@@ -44,7 +45,12 @@ router.get('/:videoId', async (req: Request, res: Response): Promise<void> => {
     if (!streamInfo) {
       console.log(`  ↳ Fetching stream URL for: ${videoId}`);
       const result = await getStreamUrl(videoId);
-      streamInfo = { url: result.url, contentType: result.contentType, headers: result.headers };
+      streamInfo = {
+        url: result.url,
+        contentType: result.contentType,
+        loudnessDb: result.loudnessDb,
+        headers: result.headers,
+      };
       streamCache.set(cacheKey, streamInfo, 4 * 60 * 60 * 1000);
     } else {
       console.log(`  ↳ Stream cache hit for: ${videoId}`);
@@ -61,7 +67,12 @@ router.get('/:videoId', async (req: Request, res: Response): Promise<void> => {
       console.log(`  ↳ Stream URL expired for ${videoId}, refreshing...`);
 
       const retryResult = await getStreamUrl(videoId);
-      streamInfo = { url: retryResult.url, contentType: retryResult.contentType, headers: retryResult.headers };
+      streamInfo = {
+        url: retryResult.url,
+        contentType: retryResult.contentType,
+        loudnessDb: retryResult.loudnessDb,
+        headers: retryResult.headers,
+      };
       streamCache.set(cacheKey, streamInfo, 4 * 60 * 60 * 1000);
 
       const retryProxyHeaders = buildProxyHeaders(req, streamInfo);
@@ -73,7 +84,7 @@ router.get('/:videoId', async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    sendStream(req, upstream, streamInfo.contentType, res);
+    sendStream(req, upstream, streamInfo.contentType, res, streamInfo.loudnessDb);
   } catch (err) {
     console.error('Stream error:', err);
     res.status(500).json({
@@ -86,11 +97,15 @@ router.get('/:videoId', async (req: Request, res: Response): Promise<void> => {
 /**
  * Pipe upstream web stream directly to Express response with automatic backpressure.
  */
-function sendStream(req: Request, upstream: globalThis.Response, contentType: string, res: Response): void {
+function sendStream(req: Request, upstream: globalThis.Response, contentType: string, res: Response, loudnessDb?: number): void {
   res.status(upstream.status);
   res.setHeader('Content-Type', contentType);
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Cache-Control', 'public, max-age=3600');
+
+  if (typeof loudnessDb === 'number') {
+    res.setHeader('X-Loudness-Db', loudnessDb.toString());
+  }
 
   const headersToForward = ['content-length', 'content-range', 'content-encoding'];
   for (const header of headersToForward) {
@@ -102,7 +117,7 @@ function sendStream(req: Request, upstream: globalThis.Response, contentType: st
 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Range');
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, X-Loudness-Db');
 
   if (req.method === 'HEAD' || !upstream.body) {
     res.end();
