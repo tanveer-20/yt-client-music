@@ -277,7 +277,7 @@ export interface StreamResult {
  */
 export async function getStreamUrl(videoId: string): Promise<StreamResult> {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
-  const formatSelector = 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio';
+  const formatSelector = 'bestaudio[acodec=opus]/bestaudio/best';
 
   const stdout = await runYtDlp([
     '-f', formatSelector,
