@@ -19,6 +19,11 @@ export function getApiBase(): string {
     const clean = customUrl.replace(/\/+$/, '');
     return clean.endsWith('/api') ? clean : `${clean}/api`;
   }
+  const envUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+  if (envUrl) {
+    const clean = envUrl.replace(/\/+$/, '');
+    return clean.endsWith('/api') ? clean : `${clean}/api`;
+  }
   if (Capacitor.isNativePlatform()) {
     return 'http://192.168.164.164:3001/api';
   }

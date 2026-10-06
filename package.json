@@ -11,7 +11,9 @@
     "dev:all": "concurrently -n client,server -c blue,green \"npm run dev\" \"npm run server\"",
     "install:all": "npm install && cd server && npm install",
     "cap:sync": "npm run build && npx cap sync android",
-    "cap:open": "npx cap open android"
+    "cap:open": "npx cap open android",
+    "deploy:vercel": "vercel",
+    "deploy:vercel:prod": "vercel --prod"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",

@@ -91,7 +91,10 @@ export const useSettingsStore = create<SettingsStore>()(
       setServerStatus: (serverStatus, serverPingMs = null) => set({ serverStatus, serverPingMs }),
 
       checkConnection: async (customUrl?: string) => {
-        const url = (customUrl !== undefined ? customUrl : get().serverUrl).trim();
+        let url = (customUrl !== undefined ? customUrl : get().serverUrl).trim();
+        if (!url && import.meta.env.VITE_API_URL) {
+          url = (import.meta.env.VITE_API_URL as string).trim();
+        }
         let targetBase = url ? url.replace(/\/+$/, '') : '';
         if (targetBase && !targetBase.endsWith('/api')) {
           targetBase = `${targetBase}/api`;

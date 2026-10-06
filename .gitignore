@@ -19,3 +19,4 @@ android/app/build/
 android/.idea/
 *.exe
 .codex/
+.vercel
