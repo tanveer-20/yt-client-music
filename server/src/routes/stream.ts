@@ -33,6 +33,7 @@ function buildProxyHeaders(req: Request, streamInfo?: { headers?: Record<string,
 router.get('/:videoId', async (req: Request, res: Response): Promise<void> => {
   try {
     const videoId = typeof req.params.videoId === 'string' ? req.params.videoId : req.params.videoId?.[0];
+    console.log(`[STREAM REQ] videoId: ${videoId}, Range: ${req.headers.range}, UA: ${req.headers['user-agent']}`);
     if (!videoId || !/^[\w-]{11}$/.test(videoId)) {
       res.status(400).json({ error: 'Invalid video ID' });
       return;

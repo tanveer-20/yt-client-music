@@ -1,5 +1,8 @@
 package com.ytmusic.app;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -10,6 +13,12 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NativeAudioPlugin.class);
         super.onCreate(savedInstanceState);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
+            }
+        }
         WebView webView = getBridge() != null ? getBridge().getWebView() : null;
         if (webView != null) {
             WebSettings settings = webView.getSettings();

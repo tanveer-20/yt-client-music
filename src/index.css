@@ -104,11 +104,38 @@
     border-radius: 2px;
   }
 
+  /* ── Themed Browser Surfaces ── */
+  ::selection {
+    background-color: rgba(239, 68, 68, 0.35);
+    color: inherit;
+  }
+
+  input,
+  textarea {
+    caret-color: #ef4444;
+  }
+
   /* ── Focus ── */
   *:focus-visible {
     outline: 2px solid rgba(239, 68, 68, 0.6);
     outline-offset: 2px;
     border-radius: 8px;
+  }
+
+  /* ── Motion Sensitivity ── */
+  @media (prefers-reduced-motion: reduce) {
+    .equalizer-bar {
+      animation: none !important;
+      height: 60% !important;
+    }
+    .loading-pulse,
+    .animate-spin-slow,
+    .animate-pulse-soft {
+      animation: none !important;
+    }
+    * {
+      scroll-behavior: auto !important;
+    }
   }
 
   /* ── Non-selectable UI ── */

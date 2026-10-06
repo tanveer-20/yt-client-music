@@ -56,6 +56,15 @@ export function TrackCard({ track, index = 0, tracks, showIndex }: TrackCardProp
     <div
       className={`track-row group ${isCurrentTrack ? 'track-row-active' : ''}`}
       onClick={handlePlay}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handlePlay();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label={`Play ${track.title} by ${track.artist}`}
     >
       {/* Index or play icon */}
       {showIndex && (

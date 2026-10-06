@@ -94,3 +94,14 @@ class StudioAudioDSP {
 }
 
 export const audioDSP = new StudioAudioDSP();
+
+// Auto-resume AudioContext when the user returns to the tab/app.
+// Browsers suspend AudioContext when the tab is backgrounded, which
+// stops audio routed through createMediaElementSource -> Web Audio graph.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      audioDSP.resume();
+    }
+  });
+}

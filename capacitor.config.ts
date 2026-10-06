@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.ytmusic.app',
-  appName: 'YT Music',
+  appName: 'Rem',
   webDir: 'dist',
   server: {
     androidScheme: 'https',

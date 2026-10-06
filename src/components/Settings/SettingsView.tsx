@@ -405,7 +405,7 @@ export function SettingsView() {
               <RiServerLine size={18} />
             </div>
             <div>
-              <p className="text-sm font-bold text-white">YT Music · Android Edition</p>
+              <p className="text-sm font-bold text-white">Rem · Android Edition</p>
               <p className="text-xs text-white/50 font-medium mt-0.5">
                 Optimized for Android 14/15 Edge-to-Edge & OLED Displays
               </p>

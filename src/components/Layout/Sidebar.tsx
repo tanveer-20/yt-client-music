@@ -57,11 +57,13 @@ export function Sidebar() {
     <aside className="hidden md:flex flex-col w-60 h-full glass border-r border-white/[0.06]">
       {/* Logo */}
       <div className="px-5 py-5">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-brand-600 flex items-center justify-center">
-            <RiPlayFill size={16} className="text-white ml-0.5" />
-          </div>
-          <span className="text-lg font-bold tracking-tight">YT Music</span>
+        <div className="flex items-center gap-3">
+          <img
+            src="/logo.png"
+            alt="Rem logo"
+            className="w-8 h-8 rounded-xl object-cover ring-1 ring-white/10 shadow-md shadow-brand-900/40"
+          />
+          <span className="text-xl font-bold tracking-tight">Rem</span>
         </div>
       </div>
 

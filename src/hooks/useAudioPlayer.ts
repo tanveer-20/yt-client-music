@@ -74,6 +74,14 @@ export function useAudioPlayer() {
       }
     });
 
+    const actionListenerPromise = NativeAudio.addListener('mediaAction', (data: any) => {
+      if (data.action === 'next') {
+        usePlayerStore.getState().next();
+      } else if (data.action === 'previous') {
+        usePlayerStore.getState().previous();
+      }
+    });
+
     progressTimer = setInterval(async () => {
       if (usePlayerStore.getState().state === 'playing' && !isSeekingRef.current) {
         try {
@@ -90,6 +98,7 @@ export function useAudioPlayer() {
 
     return () => {
       listenerPromise.then((handle: any) => handle && handle.remove());
+      actionListenerPromise.then((handle: any) => handle && handle.remove());
       if (progressTimer) clearInterval(progressTimer);
     };
   }, [clearLoadingTimeout, setDuration, setProgress, setState]);
@@ -216,7 +225,13 @@ export function useAudioPlayer() {
           console.log(`Found alternative audio stream (${alternative.id}) for ${failedTrack.title}`);
           const altStreamUrl = getStreamUrl(alternative.id);
           if (Capacitor.isNativePlatform()) {
-            NativeAudio.play({ url: altStreamUrl }).catch(() => playViaYouTube(alternative));
+            NativeAudio.play({
+              url: altStreamUrl,
+              title: alternative.title || 'Unknown Title',
+              artist: alternative.artist || 'Unknown Artist',
+              artworkUrl: alternative.thumbnail || '',
+              loudnessDb: (alternative as any).loudnessDb ?? 0,
+            }).catch(() => playViaYouTube(alternative));
           } else if (activeModeRef.current === 'html5' && audioRef.current) {
             audioRef.current.src = altStreamUrl;
             audioRef.current.play().catch(() => playViaYouTube(alternative));
@@ -272,7 +287,8 @@ export function useAudioPlayer() {
           events: {
             onReady: (event: any) => {
               isYtReadyRef.current = true;
-              event.target.setVolume(isMuted ? 0 : Math.round(volume * 100));
+              const { volume: curVol, isMuted: curMuted } = usePlayerStore.getState();
+              event.target.setVolume(curMuted ? 0 : Math.round(curVol * 100));
             },
             onStateChange: (event: any) => {
               if (activeModeRef.current !== 'youtube') return;
@@ -315,7 +331,7 @@ export function useAudioPlayer() {
       }
       window.onYouTubeIframeAPIReady = initYT;
     }
-  }, [clearLoadingTimeout, isMuted, setDuration, setState, tryAlternativeTrack, volume]);
+  }, [clearLoadingTimeout, setDuration, setState, tryAlternativeTrack]);
 
   // ── Track change → load and play ──
   useEffect(() => {
@@ -354,10 +370,14 @@ export function useAudioPlayer() {
       activeModeRef.current = 'native';
       NativeAudio.play({
         url: streamUrl,
+        title: currentTrack.title || 'Unknown Title',
+        artist: currentTrack.artist || 'Unknown Artist',
+        artworkUrl: currentTrack.thumbnail || '',
         loudnessDb: (currentTrack as any).loudnessDb ?? 0,
       })
         .then(() => {
-          NativeAudio.setVolume({ volume: isMuted ? 0 : volume }).catch(() => {});
+          const { volume: curVol, isMuted: curMuted } = usePlayerStore.getState();
+          NativeAudio.setVolume({ volume: curMuted ? 0 : curVol }).catch(() => {});
         })
         .catch((err: any) => {
           console.warn('NativeAudio play failed, falling back to YouTube engine:', err);
@@ -368,7 +388,9 @@ export function useAudioPlayer() {
     else if (audioRef.current) {
       activeModeRef.current = 'html5';
       audioRef.current.src = streamUrl;
-      audioRef.current.volume = isMuted ? 0 : volume;
+      const { volume: curVol, isMuted: curMuted } = usePlayerStore.getState();
+      audioRef.current.volume = curMuted ? 0 : curVol;
+      audioRef.current.muted = curMuted;
       audioRef.current
         .play()
         .then(() => {
@@ -391,7 +413,7 @@ export function useAudioPlayer() {
           : [],
       });
     }
-  }, [currentTrack?.id, clearLoadingTimeout, isMuted, playViaYouTube, setState, tryAlternativeTrack, volume]);
+  }, [currentTrack?.id, clearLoadingTimeout, playViaYouTube, setState, tryAlternativeTrack]);
 
   // ── Play / Pause state sync ──
   useEffect(() => {

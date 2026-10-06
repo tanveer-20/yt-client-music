@@ -1,5 +1,5 @@
 /**
- * YT Music Server — Express API for YouTube audio streaming.
+ * Rem Server — Express API for YouTube audio streaming.
  *
  * Routes:
  *   GET /api/health             — health check
@@ -108,7 +108,7 @@ async function start() {
     const localIps = getLocalIpAddresses();
     console.log('');
     console.log('╔══════════════════════════════════════════════════════════╗');
-    console.log('║  🎵  YT Music Streaming Server Running                   ║');
+    console.log('║  🎵  Rem Streaming Server Running                        ║');
     console.log('╚══════════════════════════════════════════════════════════╝');
     console.log('');
     console.log(`  💻 PC / Localhost:    http://localhost:${PORT}`);

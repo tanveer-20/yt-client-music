@@ -22,15 +22,22 @@ export function HomePage() {
     <div className="h-full overflow-y-auto">
       <div className="px-4 pt-[max(1rem,env(safe-area-inset-top,0px))] safe-scroll-bottom">
         {/* Header */}
-        <h1 className="page-title mb-6">{greeting}</h1>
+        <div className="flex items-center gap-3 mb-6">
+          <img
+            src="/logo.png"
+            alt="Rem"
+            className="w-8 h-8 rounded-xl object-cover md:hidden ring-1 ring-white/10 shadow-sm"
+          />
+          <h1 className="page-title mb-0">{greeting}</h1>
+        </div>
 
         {/* Quick actions if nothing played yet */}
         {!hasHistory && !hasPlaylists && !hasFavorites && (
           <div className="flex flex-col items-center justify-center py-16">
-            <div className="w-20 h-20 rounded-3xl bg-white/[0.05] flex items-center justify-center mb-5">
-              <RiMusic2Line size={36} className="text-brand-400" />
+            <div className="w-20 h-20 rounded-3xl overflow-hidden mb-5 ring-1 ring-white/10 shadow-2xl shadow-brand-950/60">
+              <img src="/logo.png" alt="Rem" className="w-full h-full object-cover" />
             </div>
-            <h2 className="text-xl font-bold mb-2">Welcome to YT Music</h2>
+            <h2 className="text-xl font-bold mb-2">Welcome to Rem</h2>
             <p className="text-white/40 text-sm text-center max-w-xs mb-6">
               Search for your favorite songs and start listening in the highest quality
             </p>

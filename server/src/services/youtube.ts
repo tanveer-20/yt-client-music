@@ -31,9 +31,28 @@ export interface TrackInfo extends Track {
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-function findYtDlpBinary(): string {
-  // Check local .venv in root or server directory
-  const candidates = [
+interface YtDlpCommand {
+  binary: string;
+  prefixArgs: string[];
+}
+
+function findYtDlpCommand(): YtDlpCommand {
+  const pythonCandidates = [
+    resolve(process.cwd(), '.venv', 'Scripts', 'python.exe'),
+    resolve(process.cwd(), '..', '.venv', 'Scripts', 'python.exe'),
+    resolve(process.cwd(), '.venv', 'bin', 'python'),
+    resolve(process.cwd(), '..', '.venv', 'bin', 'python'),
+    resolve(process.cwd(), 'venv', 'Scripts', 'python.exe'),
+    resolve(process.cwd(), '..', 'venv', 'Scripts', 'python.exe'),
+  ];
+
+  for (const py of pythonCandidates) {
+    if (existsSync(py)) {
+      return { binary: py, prefixArgs: ['-m', 'yt_dlp'] };
+    }
+  }
+
+  const binaryCandidates = [
     resolve(process.cwd(), '.venv', 'Scripts', 'yt-dlp.exe'),
     resolve(process.cwd(), '..', '.venv', 'Scripts', 'yt-dlp.exe'),
     resolve(process.cwd(), '.venv', 'bin', 'yt-dlp'),
@@ -42,22 +61,23 @@ function findYtDlpBinary(): string {
     resolve(process.cwd(), '..', 'venv', 'Scripts', 'yt-dlp.exe'),
   ];
 
-  for (const candidate of candidates) {
+  for (const candidate of binaryCandidates) {
     if (existsSync(candidate)) {
-      return candidate;
+      return { binary: candidate, prefixArgs: [] };
     }
   }
 
-  return 'yt-dlp';
+  return { binary: 'yt-dlp', prefixArgs: [] };
 }
 
 /**
  * Run yt-dlp with the given arguments. Returns stdout.
  */
 async function runYtDlp(args: string[]): Promise<string> {
-  const binary = findYtDlpBinary();
+  const { binary, prefixArgs } = findYtDlpCommand();
+  const allArgs = [...prefixArgs, ...args];
   try {
-    const { stdout } = await execFileAsync(binary, args, {
+    const { stdout } = await execFileAsync(binary, allArgs, {
       timeout: 30_000,
       maxBuffer: 10 * 1024 * 1024, // 10 MB
     });
@@ -385,14 +405,13 @@ export interface StreamResult {
  */
 export async function getStreamUrl(videoId: string): Promise<StreamResult> {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
-  const formatSelector = '251/bestaudio[acodec=opus]/bestaudio/best';
+  const formatSelector = '140/251/bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best';
 
   const stdout = await runYtDlp([
     '-f', formatSelector,
     '--dump-json',
     '--no-download',
     '--no-warnings',
-    '--extractor-args', 'youtube:player_client=android,web_remix',
     url,
   ]);
 

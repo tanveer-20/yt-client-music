@@ -431,7 +431,7 @@ export function NowPlayingView() {
               aria-label={isLiked ? 'Unlike' : 'Like'}
             >
               {isLiked ? (
-                <RiHeartFill size={28} className="text-brand-500 animate-bounce-in" />
+                <RiHeartFill size={28} className="text-brand-500 animate-heart-pop" />
               ) : (
                 <RiHeartLine size={28} />
               )}

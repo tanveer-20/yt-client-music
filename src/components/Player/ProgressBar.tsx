@@ -74,12 +74,33 @@ export function ProgressBar({
         setIsDragging(false);
         document.removeEventListener('touchmove', handleMove);
         document.removeEventListener('touchend', handleEnd);
+        document.removeEventListener('touchcancel', handleEnd);
       };
 
       document.addEventListener('touchmove', handleMove, { passive: false });
       document.addEventListener('touchend', handleEnd);
+      document.addEventListener('touchcancel', handleEnd);
     },
     [onChange, getValueFromEvent]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        onChange(Math.min(1, value + 0.05));
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        onChange(Math.max(0, value - 0.05));
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        onChange(0);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        onChange(1);
+      }
+    },
+    [onChange, value]
   );
 
   const handleMouseMove = useCallback(
@@ -95,16 +116,18 @@ export function ProgressBar({
   return (
     <div
       ref={barRef}
-      className={`relative cursor-pointer group ${className}`}
-      style={{ height: 24, display: 'flex', alignItems: 'center' }}
+      className={`relative cursor-pointer group touch-none select-none ${className}`}
+      style={{ height: 24, display: 'flex', alignItems: 'center', touchAction: 'none' }}
       onMouseDown={handlePointerDown}
       onTouchStart={handleTouchStart}
+      onKeyDown={handleKeyDown}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setHoverValue(null)}
       role="slider"
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(value * 100)}
+      aria-label="Seek progress"
       tabIndex={0}
     >
       {/* Track */}

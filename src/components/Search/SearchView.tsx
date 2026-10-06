@@ -107,6 +107,7 @@ export function SearchView() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Songs, artists, albums..."
+            aria-label="Search songs, artists, or albums"
             className="search-bar text-sm sm:text-base py-3"
           />
           {query && (
@@ -118,6 +119,7 @@ export function SearchView() {
                 inputRef.current?.focus();
               }}
               className="absolute right-3 top-1/2 -translate-y-1/2 btn-ghost p-1.5"
+              aria-label="Clear search query"
             >
               <RiCloseLine size={18} />
             </button>
