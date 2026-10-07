@@ -64,7 +64,7 @@ function shuffle<T>(arr: T[]): T[] {
   return result;
 }
 
-function appendHistory(history: Track[], track: Track | null): Track[] {
+export function appendHistory(history: Track[], track: Track | null): Track[] {
   if (!track) return history;
   const filtered = history.filter((t) => t.id !== track.id);
   return [track, ...filtered].slice(0, 50);
