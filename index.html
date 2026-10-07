@@ -31,8 +31,8 @@
   </head>
   <body class="antialiased overflow-hidden">
     <div id="root" class="h-full w-full overflow-hidden"></div>
-    <!-- Dedicated offscreen audio engine container for autonomous YouTube playback -->
-    <div id="youtube-audio-container" style="position: fixed; bottom: -500px; right: -500px; width: 200px; height: 200px; pointer-events: none; z-index: -9999;">
+    <!-- Dedicated audio engine container in viewport (invisible, prevents offscreen frame throttling) -->
+    <div id="youtube-audio-container" style="position: fixed; bottom: 0; right: 0; width: 200px; height: 200px; opacity: 0.001; pointer-events: none; z-index: -9999;">
       <div id="youtube-audio-player"></div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

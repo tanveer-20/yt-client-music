@@ -211,11 +211,7 @@ export function useAudioPlayer() {
         ytPlayerRef.current.loadVideoById({
           videoId: track.id,
           startSeconds: 0,
-          suggestedQuality: 'small',
         });
-        try {
-          ytPlayerRef.current.playVideo();
-        } catch {}
       } catch (err) {
         console.warn('loadVideoById failed:', err);
         setState('error');
@@ -327,11 +323,7 @@ export function useAudioPlayer() {
                   event.target.loadVideoById({
                     videoId: track.id,
                     startSeconds: 0,
-                    suggestedQuality: 'small',
                   });
-                  try {
-                    event.target.playVideo();
-                  } catch {}
                 } catch (err) {
                   console.warn('Deferred loadVideoById failed:', err);
                   setState('error');
@@ -347,12 +339,16 @@ export function useAudioPlayer() {
                 const dur = event.target.getDuration();
                 if (dur && isFinite(dur)) setDuration(dur);
               } else if (event.data === YTState.PAUSED) {
-                clearLoadingTimeout();
                 if (usePlayerStore.getState().state === 'loading') {
-                  try {
-                    event.target.playVideo();
-                  } catch {}
+                  setTimeout(() => {
+                    if (usePlayerStore.getState().state === 'loading' && ytPlayerRef.current) {
+                      try {
+                        ytPlayerRef.current.playVideo();
+                      } catch {}
+                    }
+                  }, 50);
                 } else {
+                  clearLoadingTimeout();
                   setState('paused');
                 }
               } else if (event.data === YTState.BUFFERING) {
@@ -363,7 +359,9 @@ export function useAudioPlayer() {
                 } catch {}
               } else if (event.data === YTState.ENDED) {
                 clearLoadingTimeout();
-                usePlayerStore.getState().next();
+                setTimeout(() => {
+                  usePlayerStore.getState().next();
+                }, 80);
               }
             },
             onError: (event: any) => {
@@ -427,18 +425,23 @@ export function useAudioPlayer() {
     setState('loading');
     clearLoadingTimeout();
 
-    // 8-second watchdog: if track gets stuck buffering, auto-recover
+    // 6-second watchdog: if track gets stuck buffering, auto-nudge playback
     loadingTimeoutRef.current = setTimeout(() => {
       if (usePlayerStore.getState().state === 'loading') {
-        console.warn('Loading timeout reached, resolving alternative...');
-        tryAlternativeTrack(currentTrack);
+        console.warn('Playback watchdog: track still buffering, nudging playVideo...');
+        if (activeModeRef.current === 'youtube' && ytPlayerRef.current) {
+          try {
+            ytPlayerRef.current.playVideo();
+          } catch {}
+        } else {
+          tryAlternativeTrack(currentTrack);
+        }
       }
-    }, 8000);
+    }, 6000);
 
     resolveStream(currentTrack.id)
       .then(({ url, engine }) => {
         if (engine === 'youtube' || !url) {
-          clearLoadingTimeout();
           playViaYouTube(currentTrack);
           return;
         }
