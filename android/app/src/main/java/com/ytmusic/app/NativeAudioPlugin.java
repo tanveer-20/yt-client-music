@@ -165,23 +165,34 @@ public class NativeAudioPlugin extends Plugin {
 
     @PluginMethod
     public void getProgress(PluginCall call) {
-        JSObject ret = new JSObject();
-        try {
-            PlaybackService service = PlaybackService.getInstance();
-            if (service != null) {
-                ret.put("currentTime", service.getCurrentPosition());
-                ret.put("duration", service.getDuration());
-                ret.put("isPlaying", service.isPlaying());
-            } else {
+        if (getActivity() == null) {
+            JSObject ret = new JSObject();
+            ret.put("currentTime", 0.0);
+            ret.put("duration", 0.0);
+            ret.put("isPlaying", false);
+            call.resolve(ret);
+            return;
+        }
+
+        getActivity().runOnUiThread(() -> {
+            JSObject ret = new JSObject();
+            try {
+                PlaybackService service = PlaybackService.getInstance();
+                if (service != null) {
+                    ret.put("currentTime", service.getCurrentPosition());
+                    ret.put("duration", service.getDuration());
+                    ret.put("isPlaying", service.isPlaying());
+                } else {
+                    ret.put("currentTime", 0.0);
+                    ret.put("duration", 0.0);
+                    ret.put("isPlaying", false);
+                }
+            } catch (Exception e) {
                 ret.put("currentTime", 0.0);
                 ret.put("duration", 0.0);
                 ret.put("isPlaying", false);
             }
-        } catch (Exception e) {
-            ret.put("currentTime", 0.0);
-            ret.put("duration", 0.0);
-            ret.put("isPlaying", false);
-        }
-        call.resolve(ret);
+            call.resolve(ret);
+        });
     }
 }

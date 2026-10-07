@@ -20,3 +20,4 @@ android/.idea/
 *.exe
 .codex/
 .vercel
+*.apk

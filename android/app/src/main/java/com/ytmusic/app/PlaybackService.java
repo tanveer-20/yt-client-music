@@ -1,14 +1,18 @@
 package com.ytmusic.app;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Intent;
-import android.media.audiofx.DynamicsProcessing;
+import android.content.pm.ServiceInfo;
 import android.media.audiofx.LoudnessEnhancer;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
+import androidx.core.app.NotificationCompat;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.ForwardingPlayer;
@@ -27,11 +31,11 @@ import androidx.media3.session.MediaSessionService;
  * with system lockscreen/notification media controls.
  *
  * Key design decisions:
- * - Extends MediaSessionService which automatically manages foreground notification
- * - WAKE_MODE_NETWORK keeps CPU + Wi-Fi alive when screen off
- * - DSP effects (LoudnessEnhancer, DynamicsProcessing) are optional and wrapped in try-catch
- *   because they depend on device-specific audio HAL implementations
- * - Video track disabled since we only stream audio
+ * - Immediate explicit startForeground call with registered NotificationChannel
+ *   to satisfy Android OS 5000ms SERVICE_START_FOREGROUND_TIMEOUT and prevent autoclosing.
+ * - Proper FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK on Android 14+ (targetSdk 34+).
+ * - WAKE_MODE_NETWORK keeps CPU + Wi-Fi alive when screen is off.
+ * - Device-safe DSP using LoudnessEnhancer without hazardous HAL-crashing DynamicsProcessing.
  */
 public class PlaybackService extends MediaSessionService {
     private static final String TAG = "PlaybackService";
@@ -39,6 +43,9 @@ public class PlaybackService extends MediaSessionService {
     public static final String ACTION_PLAY = "com.ytmusic.app.ACTION_PLAY";
     public static final String ACTION_PAUSE = "com.ytmusic.app.ACTION_PAUSE";
     public static final String ACTION_RESUME = "com.ytmusic.app.ACTION_RESUME";
+
+    public static final String CHANNEL_ID = "rem_playback_channel";
+    public static final int NOTIFICATION_ID = 1001;
 
     private static volatile PlaybackService instance;
 
@@ -51,10 +58,12 @@ public class PlaybackService extends MediaSessionService {
 
     private ExoPlayer player;
     private MediaSession mediaSession;
-    private DynamicsProcessing dynamicsProcessing;
     private LoudnessEnhancer loudnessEnhancer;
     private float currentLoudnessDb = 0.0f;
     private float currentVolume = 1.0f;
+
+    private String currentTitle = "Rem";
+    private String currentArtist = "Ready to play";
 
     public static PlaybackService getInstance() {
         return instance;
@@ -69,16 +78,76 @@ public class PlaybackService extends MediaSessionService {
         super.onCreate();
         instance = this;
         try {
+            createNotificationChannel();
+            // Immediately start in foreground to satisfy the OS 5-second timer
+            startForegroundNotification(currentTitle, currentArtist, false);
             initPlayer();
             initMediaSession();
-            Log.i(TAG, "PlaybackService created successfully");
+            Log.i(TAG, "PlaybackService created successfully with foreground notification");
         } catch (Exception e) {
             Log.e(TAG, "PlaybackService onCreate failed: " + e.getMessage(), e);
         }
     }
 
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                if (manager != null) {
+                    NotificationChannel channel = new NotificationChannel(
+                            CHANNEL_ID,
+                            "Rem Music Playback",
+                            NotificationManager.IMPORTANCE_LOW
+                    );
+                    channel.setDescription("Background audio playback controls for Rem");
+                    channel.setShowBadge(false);
+                    channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+                    manager.createNotificationChannel(channel);
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "createNotificationChannel error: " + e.getMessage());
+            }
+        }
+    }
+
+    private void startForegroundNotification(String title, String artist, boolean isPlaying) {
+        createNotificationChannel();
+
+        if (title != null && !title.isEmpty()) currentTitle = title;
+        if (artist != null && !artist.isEmpty()) currentArtist = artist;
+
+        try {
+            Intent launchIntent = new Intent(this, MainActivity.class);
+            launchIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            PendingIntent pendingIntent = PendingIntent.getActivity(
+                    this, 0, launchIntent,
+                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+            );
+
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                    .setContentTitle(currentTitle)
+                    .setContentText(currentArtist)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentIntent(pendingIntent)
+                    .setOngoing(isPlaying)
+                    .setOnlyAlertOnce(true)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .setPriority(NotificationCompat.PRIORITY_LOW);
+
+            Notification notification = builder.build();
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "startForeground error: " + e.getMessage());
+        }
+    }
+
     private void initPlayer() {
-        // Direct HTTP DataSource for streaming from our Express server
+        // Direct HTTP DataSource for streaming
         DefaultHttpDataSource.Factory httpDataSourceFactory = new DefaultHttpDataSource.Factory()
                 .setUserAgent("Mozilla/5.0 (Linux; Android 14) ExoPlayer")
                 .setConnectTimeoutMs(15000)
@@ -124,8 +193,10 @@ public class PlaybackService extends MediaSessionService {
                         boolean playing = player.getPlayWhenReady();
                         double dur = player.getDuration() / 1000.0;
                         notifyState(playing ? "playing" : "paused", dur);
+                        startForegroundNotification(currentTitle, currentArtist, playing);
                     } else if (playbackState == Player.STATE_ENDED) {
                         notifyState("ended", 0.0);
+                        startForegroundNotification(currentTitle, currentArtist, false);
                     } else if (playbackState == Player.STATE_BUFFERING) {
                         notifyState("loading", 0.0);
                     }
@@ -139,6 +210,7 @@ public class PlaybackService extends MediaSessionService {
                 if (player == null) return;
                 try {
                     notifyState(isPlaying ? "playing" : "paused", player.getDuration() / 1000.0);
+                    startForegroundNotification(currentTitle, currentArtist, isPlaying);
                 } catch (Exception e) {
                     Log.w(TAG, "onIsPlayingChanged error: " + e.getMessage());
                 }
@@ -148,6 +220,7 @@ public class PlaybackService extends MediaSessionService {
             public void onPlayerError(androidx.media3.common.PlaybackException error) {
                 Log.e(TAG, "ExoPlayer error [" + error.errorCode + "]: " + error.getMessage(), error);
                 notifyState("error", 0.0);
+                startForegroundNotification(currentTitle, "Playback error", false);
             }
         });
 
@@ -157,7 +230,6 @@ public class PlaybackService extends MediaSessionService {
     private void initMediaSession() {
         if (player == null) return;
 
-        // PendingIntent to relaunch MainActivity when user taps the notification
         Intent launchIntent = new Intent(this, MainActivity.class);
         launchIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pendingIntent = PendingIntent.getActivity(
@@ -165,8 +237,6 @@ public class PlaybackService extends MediaSessionService {
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
         );
 
-        // ForwardingPlayer exposes Next/Previous commands so the notification shows skip buttons
-        // These are routed back to the JS layer via eventListener
         ForwardingPlayer forwardingPlayer = new ForwardingPlayer(player) {
             @Override
             public Player.Commands getAvailableCommands() {
@@ -225,17 +295,16 @@ public class PlaybackService extends MediaSessionService {
     }
 
     /**
-     * Attach optional DSP effects. Fully wrapped in try-catch because
-     * DynamicsProcessing and LoudnessEnhancer depend on device audio HAL
-     * and can throw on certain OEM implementations.
+     * Attach optional DSP effects. Uses LoudnessEnhancer safely.
+     * Complex HAL-crashing multi-band dynamics processors are deliberately omitted
+     * to ensure rock-solid stability across all Android OEM devices.
      */
     private void attachStudioDsp(int audioSessionId) {
         if (audioSessionId == C.AUDIO_SESSION_ID_UNSET) return;
 
-        // 1. Loudness normalization
         try {
             if (loudnessEnhancer != null) {
-                try { loudnessEnhancer.release(); } catch (Exception ignored) {}
+                try { loudnessEnhancer.release(); } catch (Throwable ignored) {}
                 loudnessEnhancer = null;
             }
             loudnessEnhancer = new LoudnessEnhancer(audioSessionId);
@@ -246,45 +315,9 @@ public class PlaybackService extends MediaSessionService {
             } else {
                 loudnessEnhancer.setEnabled(false);
             }
-        } catch (Exception e) {
-            Log.w(TAG, "LoudnessEnhancer unavailable: " + e.getMessage());
+        } catch (Throwable t) {
+            Log.w(TAG, "LoudnessEnhancer unavailable: " + t.getMessage());
             loudnessEnhancer = null;
-        }
-
-        // 2. Multi-band compressor on API 28+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            try {
-                if (dynamicsProcessing != null) {
-                    try { dynamicsProcessing.release(); } catch (Exception ignored) {}
-                    dynamicsProcessing = null;
-                }
-
-                DynamicsProcessing.Config.Builder builder = new DynamicsProcessing.Config.Builder(
-                        DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
-                        2, true, 4, true, 4, false, 0, true
-                );
-                DynamicsProcessing.Config config = builder.build();
-
-                for (int ch = 0; ch < 2; ch++) {
-                    config.setMbcBandByChannelIndex(ch, 0, new DynamicsProcessing.MbcBand(
-                            true, 160f, 15f, 120f, 2.5f, -14f, 4f, -60f, 1f, 1.5f, 1f));
-                    config.setMbcBandByChannelIndex(ch, 1, new DynamicsProcessing.MbcBand(
-                            true, 1000f, 25f, 100f, 1.8f, -16f, 4f, -60f, 1f, 0f, 0f));
-                    config.setMbcBandByChannelIndex(ch, 2, new DynamicsProcessing.MbcBand(
-                            true, 5000f, 20f, 80f, 2f, -18f, 4f, -60f, 1f, 1f, 0.5f));
-                    config.setMbcBandByChannelIndex(ch, 3, new DynamicsProcessing.MbcBand(
-                            true, 20000f, 10f, 60f, 2.2f, -20f, 4f, -60f, 1f, 1.8f, 1f));
-                    config.setLimiterByChannelIndex(ch, new DynamicsProcessing.Limiter(
-                            true, true, 0, 1f, 40f, 10f, -0.5f, 0f));
-                }
-
-                dynamicsProcessing = new DynamicsProcessing(0, audioSessionId, config);
-                dynamicsProcessing.setEnabled(true);
-                Log.i(TAG, "MBDRC attached to session " + audioSessionId);
-            } catch (Exception e) {
-                Log.w(TAG, "DynamicsProcessing unavailable: " + e.getMessage());
-                dynamicsProcessing = null;
-            }
         }
     }
 
@@ -303,7 +336,7 @@ public class PlaybackService extends MediaSessionService {
             return;
         }
 
-        // Resolve URLs so ExoPlayer can reach our Express server on the PC
+        // Resolve URLs: if relative path, resolve against default local dev server. Direct http(s) URLs are preserved!
         if (url != null) {
             if (url.startsWith("/")) {
                 url = "http://192.168.164.164:3001" + url;
@@ -313,12 +346,18 @@ public class PlaybackService extends MediaSessionService {
             }
         }
 
-        Log.i(TAG, "playTrack: " + url + " | " + title + " - " + artist);
+        currentTitle = (title != null && !title.isEmpty()) ? title : "Unknown Title";
+        currentArtist = (artist != null && !artist.isEmpty()) ? artist : "Unknown Artist";
         currentLoudnessDb = loudnessDb;
 
+        Log.i(TAG, "playTrack: " + url + " | " + currentTitle + " - " + currentArtist);
+
+        // Update foreground notification immediately
+        startForegroundNotification(currentTitle, currentArtist, true);
+
         MediaMetadata.Builder metaBuilder = new MediaMetadata.Builder()
-                .setTitle(title != null && !title.isEmpty() ? title : "Unknown Title")
-                .setArtist(artist != null && !artist.isEmpty() ? artist : "Unknown Artist");
+                .setTitle(currentTitle)
+                .setArtist(currentArtist);
 
         if (artworkUrl != null && !artworkUrl.isEmpty()) {
             try {
@@ -346,7 +385,10 @@ public class PlaybackService extends MediaSessionService {
 
     public void pausePlayback() {
         if (player != null) {
-            try { player.pause(); } catch (Exception e) {
+            try {
+                player.pause();
+                startForegroundNotification(currentTitle, currentArtist, false);
+            } catch (Exception e) {
                 Log.w(TAG, "pause error: " + e.getMessage());
             }
         }
@@ -354,7 +396,10 @@ public class PlaybackService extends MediaSessionService {
 
     public void resumePlayback() {
         if (player != null) {
-            try { player.play(); } catch (Exception e) {
+            try {
+                player.play();
+                startForegroundNotification(currentTitle, currentArtist, true);
+            } catch (Exception e) {
                 Log.w(TAG, "resume error: " + e.getMessage());
             }
         }
@@ -397,8 +442,10 @@ public class PlaybackService extends MediaSessionService {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // Let MediaSessionService handle the intent first (manages foreground notification)
         int result = super.onStartCommand(intent, flags, startId);
+
+        // Always satisfy foreground obligation
+        startForegroundNotification(currentTitle, currentArtist, isPlaying());
 
         if (intent != null && intent.getAction() != null) {
             try {
@@ -433,7 +480,6 @@ public class PlaybackService extends MediaSessionService {
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        // If nothing is playing, stop the service when user swipes the app away
         if (player != null && !player.getPlayWhenReady()) {
             stopSelf();
         }
@@ -442,20 +488,24 @@ public class PlaybackService extends MediaSessionService {
 
     @Override
     public void onDestroy() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE);
+            } else {
+                stopForeground(true);
+            }
+        } catch (Throwable ignored) {}
+
         if (loudnessEnhancer != null) {
-            try { loudnessEnhancer.release(); } catch (Exception ignored) {}
+            try { loudnessEnhancer.release(); } catch (Throwable ignored) {}
             loudnessEnhancer = null;
         }
-        if (dynamicsProcessing != null) {
-            try { dynamicsProcessing.release(); } catch (Exception ignored) {}
-            dynamicsProcessing = null;
-        }
         if (mediaSession != null) {
-            try { mediaSession.release(); } catch (Exception ignored) {}
+            try { mediaSession.release(); } catch (Throwable ignored) {}
             mediaSession = null;
         }
         if (player != null) {
-            try { player.release(); } catch (Exception ignored) {}
+            try { player.release(); } catch (Throwable ignored) {}
             player = null;
         }
         instance = null;
