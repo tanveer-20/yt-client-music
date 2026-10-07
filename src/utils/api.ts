@@ -25,7 +25,7 @@ export function getApiBase(): string {
     return clean.endsWith('/api') ? clean : `${clean}/api`;
   }
   if (Capacitor.isNativePlatform()) {
-    return 'http://192.168.164.164:3001/api';
+    return 'https://rem-mocha.vercel.app/api';
   }
   return '/api';
 }
@@ -171,15 +171,47 @@ async function searchDirectYouTube(query: string, limit = 15, signal?: AbortSign
 }
 
 /**
- * Safe fetch wrapper that verifies JSON content-type before parsing.
+ * Safe fetch wrapper with native CapacitorHttp support, timeouts, and JSON validation.
  */
 async function safeFetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  // 1. On Android native, use CapacitorHttp (bypasses CORS, fast native sockets, reliable timeouts)
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const response = await CapacitorHttp.get({
+        url,
+        headers: {
+          Accept: 'application/json',
+          ...((init?.headers as Record<string, string>) || {}),
+        },
+        connectTimeout: 5000,
+        readTimeout: 7000,
+      });
+
+      if (response.status >= 200 && response.status < 300 && response.data) {
+        const parsed = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+        return parsed as T;
+      }
+    } catch (nativeErr: any) {
+      console.warn('CapacitorHttp native request failed, falling back to fetch:', nativeErr);
+    }
+  }
+
+  // 2. Standard fetch with 6-second watchdog timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
+
   let res: Response;
   try {
-    res = await fetch(url, init);
+    res = await fetch(url, {
+      ...init,
+      signal: init?.signal || controller.signal,
+    });
   } catch (err: any) {
+    clearTimeout(timeoutId);
     if (err.name === 'AbortError') throw err;
     throw new Error(`Cannot connect to server`);
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   const contentType = res.headers.get('content-type') || '';

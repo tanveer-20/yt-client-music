@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import type { ThemeMode, AudioQuality, TrackInfo } from '../types';
 
 export interface TechnicalDetails {
@@ -95,6 +96,9 @@ export const useSettingsStore = create<SettingsStore>()(
         if (!url && import.meta.env.VITE_API_URL) {
           url = (import.meta.env.VITE_API_URL as string).trim();
         }
+        if (!url && Capacitor.isNativePlatform()) {
+          url = 'https://rem-mocha.vercel.app';
+        }
         let targetBase = url ? url.replace(/\/+$/, '') : '';
         if (targetBase && !targetBase.endsWith('/api')) {
           targetBase = `${targetBase}/api`;
@@ -104,6 +108,24 @@ export const useSettingsStore = create<SettingsStore>()(
         set({ serverStatus: 'checking' });
         const start = Date.now();
         try {
+          if (Capacitor.isNativePlatform()) {
+            const res = await CapacitorHttp.get({
+              url: endpoint,
+              connectTimeout: 5000,
+              readTimeout: 5000,
+            });
+            const pingMs = Date.now() - start;
+            if (res.status === 200 && res.data) {
+              const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+              if (data.status === 'ok') {
+                set({ serverStatus: 'connected', serverPingMs: pingMs });
+                return { ok: true, message: `Connected (${pingMs}ms)`, pingMs };
+              }
+            }
+            set({ serverStatus: 'disconnected', serverPingMs: null });
+            return { ok: false, message: `Server replied with status ${res.status}` };
+          }
+
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 6000);
 
