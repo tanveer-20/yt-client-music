@@ -15,7 +15,15 @@
     <link rel="preconnect" href="https://www.youtube.com" />
     <link rel="preconnect" href="https://www.google.com" />
     <link rel="preconnect" href="https://i.ytimg.com" />
-    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+      window.onYouTubeIframeAPIReady = function() {
+        window.__ytIframeReady = true;
+        if (typeof window.__initYT === 'function') {
+          window.__initYT();
+        }
+      };
+    </script>
+    <script id="yt-iframe-api-script" src="https://www.youtube.com/iframe_api"></script>
     <style>
       /* Prevent FOUC */
       html { background: #000; }
@@ -23,6 +31,10 @@
   </head>
   <body class="antialiased overflow-hidden">
     <div id="root" class="h-full w-full overflow-hidden"></div>
+    <!-- Dedicated offscreen audio engine container for autonomous YouTube playback -->
+    <div id="youtube-audio-container" style="position: fixed; bottom: -500px; right: -500px; width: 200px; height: 200px; pointer-events: none; z-index: -9999;">
+      <div id="youtube-audio-player"></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

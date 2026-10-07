@@ -20,6 +20,7 @@ interface PlayerStore {
   isMuted: boolean;
   repeatMode: RepeatMode;
   isShuffled: boolean;
+  playRequestId: number;
 
   // ── Queue ──
   queue: Track[];
@@ -81,6 +82,7 @@ export const usePlayerStore = create<PlayerStore>()(
       isMuted: false,
       repeatMode: 'off',
       isShuffled: false,
+      playRequestId: 0,
       queue: [],
       queueIndex: -1,
       originalQueue: [],
@@ -92,13 +94,14 @@ export const usePlayerStore = create<PlayerStore>()(
         const { history } = get();
         const newHistory = appendHistory(history, track);
 
-        set({
+        set((s) => ({
           currentTrack: track,
           state: 'loading',
           progress: 0,
           duration: 0,
           history: newHistory,
-        });
+          playRequestId: s.playRequestId + 1,
+        }));
       },
 
       pause: () => set({ state: 'paused' }),
@@ -112,7 +115,7 @@ export const usePlayerStore = create<PlayerStore>()(
 
         if (repeatMode === 'one') {
           // Replay current track
-          set({ state: 'loading', progress: 0 });
+          set((s) => ({ state: 'loading', progress: 0, playRequestId: s.playRequestId + 1 }));
           return;
         }
 
@@ -152,14 +155,15 @@ export const usePlayerStore = create<PlayerStore>()(
         const targetTrack = queue[nextIndex];
         const newHistory = appendHistory(history, targetTrack);
 
-        set({
+        set((s) => ({
           currentTrack: targetTrack,
           queueIndex: nextIndex,
           state: 'loading',
           progress: 0,
           duration: 0,
           history: newHistory,
-        });
+          playRequestId: s.playRequestId + 1,
+        }));
       },
 
       previous: () => {
@@ -167,7 +171,7 @@ export const usePlayerStore = create<PlayerStore>()(
 
         // If more than 3 seconds in, restart the track
         if (progress > 3) {
-          set({ progress: 0, state: 'loading' });
+          set((s) => ({ progress: 0, state: 'loading', playRequestId: s.playRequestId + 1 }));
           return;
         }
 
@@ -177,27 +181,29 @@ export const usePlayerStore = create<PlayerStore>()(
           const targetTrack = queue[prevIndex];
           const newHistory = appendHistory(history, targetTrack);
 
-          set({
+          set((s) => ({
             currentTrack: targetTrack,
             queueIndex: prevIndex,
             state: 'loading',
             progress: 0,
             duration: 0,
             history: newHistory,
-          });
+            playRequestId: s.playRequestId + 1,
+          }));
           return;
         }
 
         // Try history
         if (history.length > 0) {
           const [prev, ...rest] = history;
-          set({
+          set((s) => ({
             currentTrack: prev,
             state: 'loading',
             progress: 0,
             duration: 0,
             history: rest,
-          });
+            playRequestId: s.playRequestId + 1,
+          }));
         }
       },
 
@@ -298,7 +304,7 @@ export const usePlayerStore = create<PlayerStore>()(
         const { history } = get();
         const newHistory = appendHistory(history, targetTrack);
 
-        set({
+        set((s) => ({
           queue: tracks,
           originalQueue: tracks,
           queueIndex: startIndex,
@@ -308,7 +314,8 @@ export const usePlayerStore = create<PlayerStore>()(
           duration: 0,
           isShuffled: false,
           history: newHistory,
-        });
+          playRequestId: s.playRequestId + 1,
+        }));
       },
 
       reorderQueue: (from, to) => {

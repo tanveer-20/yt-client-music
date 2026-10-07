@@ -26,7 +26,7 @@ interface TrackCardProps {
 export function TrackCard({ track, index = 0, tracks, showIndex }: TrackCardProps) {
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { currentTrack, state, playQueue, addToQueue, playNext } = usePlayerStore();
+  const { currentTrack, state, playQueue, play, pause, resume, addToQueue, playNext } = usePlayerStore();
   const { playlists, addTrack } = usePlaylistStore();
 
   const isCurrentTrack = currentTrack?.id === track.id;
@@ -45,6 +45,17 @@ export function TrackCard({ track, index = 0, tracks, showIndex }: TrackCardProp
   }, [showMenu]);
 
   const handlePlay = () => {
+    if (isCurrentTrack) {
+      if (state === 'playing') {
+        pause();
+      } else if (state === 'paused') {
+        resume();
+      } else {
+        play(track);
+      }
+      return;
+    }
+
     if (tracks && tracks.length > 0) {
       playQueue(tracks, index);
     } else {
