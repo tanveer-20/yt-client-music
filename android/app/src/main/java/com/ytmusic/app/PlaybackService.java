@@ -43,6 +43,8 @@ public class PlaybackService extends MediaSessionService {
     public static final String ACTION_PLAY = "com.ytmusic.app.ACTION_PLAY";
     public static final String ACTION_PAUSE = "com.ytmusic.app.ACTION_PAUSE";
     public static final String ACTION_RESUME = "com.ytmusic.app.ACTION_RESUME";
+    public static final String ACTION_NEXT = "com.ytmusic.app.ACTION_NEXT";
+    public static final String ACTION_PREVIOUS = "com.ytmusic.app.ACTION_PREVIOUS";
 
     public static final String CHANNEL_ID = "rem_playback_channel";
     public static final int NOTIFICATION_ID = 1001;
@@ -124,11 +126,32 @@ public class PlaybackService extends MediaSessionService {
                     PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
             );
 
+            Intent prevIntent = new Intent(this, PlaybackService.class).setAction(ACTION_PREVIOUS);
+            PendingIntent prevPendingIntent = PendingIntent.getService(
+                    this, 1, prevIntent,
+                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+            );
+
+            Intent toggleIntent = new Intent(this, PlaybackService.class).setAction(isPlaying ? ACTION_PAUSE : ACTION_RESUME);
+            PendingIntent togglePendingIntent = PendingIntent.getService(
+                    this, 2, toggleIntent,
+                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+            );
+
+            Intent nextIntent = new Intent(this, PlaybackService.class).setAction(ACTION_NEXT);
+            PendingIntent nextPendingIntent = PendingIntent.getService(
+                    this, 3, nextIntent,
+                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+            );
+
             NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                     .setContentTitle(currentTitle)
                     .setContentText(currentArtist)
                     .setSmallIcon(R.mipmap.ic_launcher)
                     .setContentIntent(pendingIntent)
+                    .addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent)
+                    .addAction(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play, isPlaying ? "Pause" : "Play", togglePendingIntent)
+                    .addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent)
                     .setOngoing(isPlaying)
                     .setOnlyAlertOnce(true)
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -463,6 +486,14 @@ public class PlaybackService extends MediaSessionService {
                     pausePlayback();
                 } else if (ACTION_RESUME.equals(action)) {
                     resumePlayback();
+                } else if (ACTION_NEXT.equals(action)) {
+                    if (eventListener != null) {
+                        eventListener.onMediaAction("next");
+                    }
+                } else if (ACTION_PREVIOUS.equals(action)) {
+                    if (eventListener != null) {
+                        eventListener.onMediaAction("previous");
+                    }
                 }
             } catch (Exception e) {
                 Log.e(TAG, "onStartCommand action error: " + e.getMessage());
