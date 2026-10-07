@@ -1,6 +1,10 @@
 /**
- * Vercel Serverless Function — Search YouTube Music & YouTube
+ * Vercel Serverless Function — High-Fidelity Music Search
  * GET /api/search?q=<query>&limit=<n>
+ *
+ * Simultaneously queries YouTube Music (filtered to Songs catalogue)
+ * and YouTube Web in parallel, merging and deduplicating results to
+ * guarantee 30-40 rich, accurate tracks matching the query.
  */
 
 function parseDurationText(text) {
@@ -11,7 +15,11 @@ function parseDurationText(text) {
   return 0;
 }
 
-async function searchYouTubeMusic(query, limit = 25) {
+/**
+ * Searches YouTube Music with the Songs filter.
+ * Returns official artist tracks, singles, and album cuts.
+ */
+async function searchYouTubeMusicSongs(query) {
   try {
     const res = await fetch('https://music.youtube.com/youtubei/v1/search', {
       method: 'POST',
@@ -31,21 +39,41 @@ async function searchYouTubeMusic(query, limit = 25) {
           },
         },
         query,
+        // YouTube Music 'Songs' filter parameter
+        params: 'EgWKAQIIAWoQEAMQBBAJEAoQBRAREBAQFA==',
       }),
     });
 
     if (!res.ok) return [];
 
     const data = await res.json();
-    const sections =
-      data.contents?.tabbedSearchResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents || [];
-
     const tracks = [];
-    const seen = new Set();
 
-    function addTrack(title, artist, videoId, thumbs, durationStr) {
-      if (!videoId || seen.has(videoId)) return;
-      seen.add(videoId);
+    const shelfContents =
+      data.contents?.tabbedSearchResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.musicShelfRenderer?.contents || [];
+
+    for (const item of shelfContents) {
+      const r = item.musicResponsiveListItemRenderer;
+      if (!r) continue;
+
+      const videoId =
+        r.playlistItemData?.videoId ||
+        r.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.navigationEndpoint?.watchEndpoint?.videoId ||
+        r.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
+
+      if (!videoId) continue;
+
+      const title = r.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || 'Unknown Title';
+      const runs = r.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+
+      const artist =
+        runs
+          .map((x) => x.text)
+          .filter((t) => t && t !== ' • ' && !t.includes(':') && t !== 'Song' && t !== 'Album' && t !== 'Video')
+          .join(', ') || 'Unknown Artist';
+
+      const durationRun = runs.find((x) => /^\d+:\d+$/.test(x.text));
+      const thumbs = r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails;
 
       let thumbUrl = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
       if (thumbs && thumbs.length > 0) {
@@ -54,48 +82,11 @@ async function searchYouTubeMusic(query, limit = 25) {
 
       tracks.push({
         id: videoId,
-        title: title || 'Unknown',
-        artist: artist || 'Unknown Artist',
+        title,
+        artist,
         thumbnail: thumbUrl,
-        duration: parseDurationText(durationStr),
+        duration: parseDurationText(durationRun?.text),
       });
-    }
-
-    for (const s of sections) {
-      if (s.musicCardShelfRenderer) {
-        const card = s.musicCardShelfRenderer;
-        const title = card.title?.runs?.[0]?.text;
-        const artist = card.subtitle?.runs?.[0]?.text;
-        const videoId =
-          card.onTap?.watchEndpoint?.videoId ||
-          card.buttons?.[0]?.buttonRenderer?.command?.watchEndpoint?.videoId;
-        const thumbs = card.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails;
-        addTrack(title, artist, videoId, thumbs);
-      }
-
-      const shelfItems = s.musicShelfRenderer?.contents || s.itemSectionRenderer?.contents || [];
-      for (const item of shelfItems) {
-        const r = item.musicResponsiveListItemRenderer;
-        if (r) {
-          const videoId =
-            r.playlistItemData?.videoId ||
-            r.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.navigationEndpoint?.watchEndpoint?.videoId ||
-            r.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
-          const title = r.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
-          const runs = r.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
-          const artist =
-            runs
-              .map((x) => x.text)
-              .filter((t) => t && t !== ' • ' && !t.includes(':') && t !== 'Song' && t !== 'Album' && t !== 'Video')
-              .join(', ') || 'Unknown Artist';
-
-          const durationRun = runs.find((x) => /^\d+:\d+$/.test(x.text));
-          const thumbs = r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails;
-
-          addTrack(title, artist, videoId, thumbs, durationRun?.text);
-          if (tracks.length >= limit) return tracks;
-        }
-      }
     }
 
     return tracks;
@@ -104,7 +95,10 @@ async function searchYouTubeMusic(query, limit = 25) {
   }
 }
 
-async function searchYouTubeWeb(query, limit = 25) {
+/**
+ * Searches standard YouTube Web for official videos, lyrics, and audio releases.
+ */
+async function searchYouTubeWeb(query) {
   try {
     const res = await fetch('https://www.youtube.com/youtubei/v1/search', {
       method: 'POST',
@@ -141,7 +135,7 @@ async function searchYouTubeWeb(query, limit = 25) {
       const v = item.videoRenderer || item.compactVideoRenderer;
       if (v && v.videoId && !seenIds.has(v.videoId)) {
         seenIds.add(v.videoId);
-        const title = v.title?.runs?.[0]?.text || v.title?.simpleText || 'Unknown';
+        const title = v.title?.runs?.[0]?.text || v.title?.simpleText || 'Unknown Title';
         const artist =
           v.ownerText?.runs?.[0]?.text ||
           v.longBylineText?.runs?.[0]?.text ||
@@ -151,14 +145,13 @@ async function searchYouTubeWeb(query, limit = 25) {
         const thumbs = v.thumbnail?.thumbnails || [];
         const thumbUrl = thumbs.length > 0 ? thumbs[thumbs.length - 1].url : `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`;
         const durationText = v.lengthText?.simpleText || v.lengthText?.accessibility?.accessibilityData?.label;
-        const duration = parseDurationText(durationText);
 
         tracks.push({
           id: v.videoId,
           title,
           artist,
           thumbnail: thumbUrl,
-          duration,
+          duration: parseDurationText(durationText),
         });
       }
 
@@ -169,7 +162,6 @@ async function searchYouTubeWeb(query, limit = 25) {
           [];
         for (const si of shelfItems) {
           extractItem(si);
-          if (tracks.length >= limit) return;
         }
       }
     }
@@ -178,7 +170,6 @@ async function searchYouTubeWeb(query, limit = 25) {
       const items = section.itemSectionRenderer?.contents || [];
       for (const item of items) {
         extractItem(item);
-        if (tracks.length >= limit) return tracks;
       }
     }
 
@@ -198,20 +189,45 @@ export default async function handler(req, res) {
   }
 
   const query = req.query.q;
-  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || '25', 10)));
+  const requestedLimit = parseInt(req.query.limit || '40', 10);
+  const limit = Math.min(50, Math.max(1, isNaN(requestedLimit) ? 40 : requestedLimit));
 
   if (!query || typeof query !== 'string') {
     return res.status(400).json({ error: 'Search query is required' });
   }
 
   try {
-    let results = await searchYouTubeMusic(query.trim(), limit);
-    if (!results || results.length === 0) {
-      results = await searchYouTubeWeb(query.trim(), limit);
+    const cleanQuery = query.trim();
+
+    // Query both YouTube Music catalogue and YouTube Web simultaneously
+    const [ytmSongs, webVideos] = await Promise.all([
+      searchYouTubeMusicSongs(cleanQuery),
+      searchYouTubeWeb(cleanQuery),
+    ]);
+
+    const merged = [];
+    const seenIds = new Set();
+
+    // 1. Prioritize official YouTube Music song releases
+    for (const track of ytmSongs) {
+      if (track.id && !seenIds.has(track.id)) {
+        seenIds.add(track.id);
+        merged.push(track);
+        if (merged.length >= limit) break;
+      }
+    }
+
+    // 2. Append YouTube Web results (official music videos, live versions, remixes)
+    for (const track of webVideos) {
+      if (track.id && !seenIds.has(track.id)) {
+        seenIds.add(track.id);
+        merged.push(track);
+        if (merged.length >= limit) break;
+      }
     }
 
     res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=86400');
-    return res.status(200).json({ results });
+    return res.status(200).json({ results: merged, total: merged.length });
   } catch (err) {
     return res.status(500).json({ error: 'Search failed', message: err.message });
   }

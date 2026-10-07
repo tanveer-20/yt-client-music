@@ -158,6 +158,7 @@ async function searchYouTubeMusicFast(query: string, limit = 10): Promise<Track[
           },
         },
         query,
+        params: 'EgWKAQIIAWoQEAMQBBAJEAoQBRAREBAQFA==',
       }),
     });
 
