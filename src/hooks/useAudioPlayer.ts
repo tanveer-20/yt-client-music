@@ -8,6 +8,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { usePlayerStore } from '../stores/playerStore';
 import { getStreamUrl, searchTracks } from '../utils/api';
+import { resolveStream } from '../utils/streamResolver';
 import { audioDSP } from '../utils/audioEnhancer';
 import type { Track } from '../types';
 
@@ -363,45 +364,56 @@ export function useAudioPlayer() {
       }
     }, 8000);
 
-    const streamUrl = getStreamUrl(currentTrack.id);
-
-    // Primary 1: Native Android Media3 ExoPlayer + MBDRC Studio Engine
-    if (Capacitor.isNativePlatform()) {
-      activeModeRef.current = 'native';
-      NativeAudio.play({
-        url: streamUrl,
-        title: currentTrack.title || 'Unknown Title',
-        artist: currentTrack.artist || 'Unknown Artist',
-        artworkUrl: currentTrack.thumbnail || '',
-        loudnessDb: (currentTrack as any).loudnessDb ?? 0,
-      })
-        .then(() => {
-          const { volume: curVol, isMuted: curMuted } = usePlayerStore.getState();
-          NativeAudio.setVolume({ volume: curMuted ? 0 : curVol }).catch(() => {});
-        })
-        .catch((err: any) => {
-          console.warn('NativeAudio play failed, falling back to YouTube engine:', err);
-          playViaYouTube(currentTrack);
-        });
-    }
-    // Primary 2: Web Browser Studio DSP Engine
-    else if (audioRef.current) {
-      activeModeRef.current = 'html5';
-      audioRef.current.src = streamUrl;
-      const { volume: curVol, isMuted: curMuted } = usePlayerStore.getState();
-      audioRef.current.volume = curMuted ? 0 : curVol;
-      audioRef.current.muted = curMuted;
-      audioRef.current
-        .play()
-        .then(() => {
+    resolveStream(currentTrack.id)
+      .then(({ url, engine }) => {
+        if (engine === 'youtube' || !url) {
           clearLoadingTimeout();
-          setState('playing');
-        })
-        .catch((err) => {
-          console.warn('HTML5 play promise rejected, switching to YouTube engine:', err.message);
           playViaYouTube(currentTrack);
-        });
-    }
+          return;
+        }
+
+        // Primary 1: Native Android Media3 ExoPlayer + MBDRC Studio Engine
+        if (Capacitor.isNativePlatform() || engine === 'native') {
+          activeModeRef.current = 'native';
+          NativeAudio.play({
+            url,
+            title: currentTrack.title || 'Unknown Title',
+            artist: currentTrack.artist || 'Unknown Artist',
+            artworkUrl: currentTrack.thumbnail || '',
+            loudnessDb: (currentTrack as any).loudnessDb ?? 0,
+          })
+            .then(() => {
+              const { volume: curVol, isMuted: curMuted } = usePlayerStore.getState();
+              NativeAudio.setVolume({ volume: curMuted ? 0 : curVol }).catch(() => {});
+            })
+            .catch((err: any) => {
+              console.warn('NativeAudio play failed, falling back to YouTube engine:', err);
+              playViaYouTube(currentTrack);
+            });
+        }
+        // Primary 2: Web Browser Studio DSP Engine
+        else if (audioRef.current) {
+          activeModeRef.current = 'html5';
+          audioRef.current.src = url;
+          const { volume: curVol, isMuted: curMuted } = usePlayerStore.getState();
+          audioRef.current.volume = curMuted ? 0 : curVol;
+          audioRef.current.muted = curMuted;
+          audioRef.current
+            .play()
+            .then(() => {
+              clearLoadingTimeout();
+              setState('playing');
+            })
+            .catch((err) => {
+              console.warn('HTML5 play promise rejected, switching to YouTube engine:', err.message);
+              playViaYouTube(currentTrack);
+            });
+        }
+      })
+      .catch(() => {
+        clearLoadingTimeout();
+        playViaYouTube(currentTrack);
+      });
 
     // Update MediaSession
     if ('mediaSession' in navigator) {

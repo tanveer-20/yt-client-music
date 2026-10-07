@@ -5,6 +5,14 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/info/:id",
+      "destination": "/api/info?id=:id"
+    },
+    {
+      "source": "/api/suggestions/:id",
+      "destination": "/api/suggestions?id=:id"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
