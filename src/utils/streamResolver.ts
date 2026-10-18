@@ -72,52 +72,13 @@ const ANDROID_CLIENTS: InnerTubeClientConfig[] = [
   },
 ];
 
-const FALLBACK_INVIDIOUS_INSTANCES = [
-  'https://invidious.f5.si',
-  'https://inv.nadeko.net',
-  'https://invidious.nerdvpn.de',
-  'https://invidious.private.coffee',
-];
+
 
 const PIPED_INSTANCES = [
   'https://pipedapi.adminforge.de',
   'https://api.piped.private.coffee',
   'https://pipedapi.leptons.xyz',
 ];
-
-let cachedInvidiousInstances: string[] = [];
-let lastInstancesFetchTime = 0;
-
-async function getHealthyInvidiousInstances(): Promise<string[]> {
-  const now = Date.now();
-  if (cachedInvidiousInstances.length > 0 && now - lastInstancesFetchTime < 30 * 60 * 1000) {
-    return cachedInvidiousInstances;
-  }
-
-  try {
-    const res = await fetch('https://api.invidious.io/instances.json?sort_by=health', {
-      signal: AbortSignal.timeout(3000),
-      headers: { Accept: 'application/json' },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        const healthy = data
-          .filter((entry: any) => Array.isArray(entry) && entry[1]?.type === 'https' && entry[1]?.api)
-          .slice(0, 6)
-          .map((entry: any) => `https://${entry[0]}`);
-
-        if (healthy.length > 0) {
-          cachedInvidiousInstances = [...new Set([...healthy, ...FALLBACK_INVIDIOUS_INSTANCES])];
-          lastInstancesFetchTime = now;
-          return cachedInvidiousInstances;
-        }
-      }
-    }
-  } catch {}
-
-  return FALLBACK_INVIDIOUS_INSTANCES;
-}
 
 function extractDirectAudioUrl(streamingData: any): string | null {
   if (!streamingData) return null;
@@ -228,78 +189,13 @@ async function resolveAndroidStream(videoId: string): Promise<string | null> {
  * Falls back to the app's own backend /api/stream endpoint before giving up.
  */
 async function resolveWebStream(videoId: string): Promise<string | null> {
-  // Tier 1: Dynamic Invidious Instances (provides valid Proof-of-Origin cross-IP streams)
-  try {
-    const invidiousList = await getHealthyInvidiousInstances();
-    for (const instance of invidiousList.slice(0, 4)) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`${instance}/api/v1/videos/${videoId}?fields=adaptiveFormats`, {
-          signal: controller.signal,
-          headers: { Accept: 'application/json' },
-        });
-        clearTimeout(timeoutId);
-        if (res.ok) {
-          const data = await res.json();
-          const audios = (data.adaptiveFormats || []).filter(
-            (f: any) => f.type && f.type.startsWith('audio/') && f.url
-          );
-          if (audios.length > 0) {
-            // Prefer AAC (itag 140) for universal codec compatibility across iOS Safari and Android Chrome
-            const best =
-              audios.find((f: any) => f.itag === 140 || f.itag === '140') ||
-              audios.find((f: any) => f.itag === 251 || f.itag === '251') ||
-              audios[0];
-            if (best?.url) {
-              return best.url;
-            }
-          }
-        }
-      } catch {
-        // Try next Invidious instance
-      }
-    }
-  } catch {}
-
-  // Tier 2: Public Piped Instances
-  for (const instance of PIPED_INSTANCES) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(`${instance}/streams/${videoId}`, {
-        signal: controller.signal,
-        headers: { Accept: 'application/json' },
-      });
-      clearTimeout(timeoutId);
-      if (res.ok) {
-        const data = await res.json();
-        const audioStreams = data.audioStreams || [];
-        if (audioStreams.length > 0) {
-          // Prefer AAC (itag 140) on mobile — wider codec support than Opus
-          const best =
-            audioStreams.find((s: any) => s.itag === 140 && s.url) ||
-            audioStreams.find((s: any) => s.itag === 251 && s.url) ||
-            audioStreams[0];
-          if (best && best.url) {
-            return best.url;
-          }
-        }
-      }
-    } catch {
-      // This instance timed out or errored — try next
-    }
-  }
-
-  // Last resort: use the app's own backend stream endpoint.
-  // This is a proxied yt-dlp stream that works perfectly with HTML5 <audio>,
-  // enabling background playback where Piped instances failed.
+  // Tier 1: App's own high-performance backend stream endpoint (instant 256kbps audio)
   try {
     const backendBase = getBackendStreamBase();
     if (backendBase) {
       const probeUrl = `${backendBase}/stream/${videoId}`;
       const probeController = new AbortController();
-      const probeTimeout = setTimeout(() => probeController.abort(), 3000);
+      const probeTimeout = setTimeout(() => probeController.abort(), 1200);
       const probe = await fetch(probeUrl, {
         method: 'HEAD',
         signal: probeController.signal,
@@ -310,7 +206,35 @@ async function resolveWebStream(videoId: string): Promise<string | null> {
       }
     }
   } catch {
-    // Backend unreachable — will fall through to YouTube iframe
+    // Backend unreachable — check next tiers
+  }
+
+  // Tier 2: Public Piped Instances (quick probe with 1.5s timeout)
+  for (const instance of PIPED_INSTANCES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1500);
+      const res = await fetch(`${instance}/streams/${videoId}`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        const audioStreams = data.audioStreams || [];
+        if (audioStreams.length > 0) {
+          const best =
+            audioStreams.find((s: any) => s.itag === 140 && s.url) ||
+            audioStreams.find((s: any) => s.itag === 251 && s.url) ||
+            audioStreams[0];
+          if (best && best.url) {
+            return best.url;
+          }
+        }
+      }
+    } catch {
+      // Continue to next instance
+    }
   }
 
   return null;

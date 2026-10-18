@@ -16,7 +16,6 @@ import {
   mediaPositionTracker,
   cleanTitle,
   cleanArtist,
-  SILENT_AUDIO_URI,
 } from '../utils/mediaSession';
 import type { Track } from '../types';
 
@@ -247,10 +246,8 @@ export function useAudioPlayer() {
 
       if (audioRef.current) {
         audioRef.current.pause();
-        audioRef.current.src = SILENT_AUDIO_URI;
-        audioRef.current.loop = true;
-        audioRef.current.volume = 0.001;
-        audioRef.current.play().catch(() => {});
+        audioRef.current.removeAttribute('src');
+        audioRef.current.load();
       }
 
       // Immediately assert top-level MediaSession so Android displays our branded
@@ -476,10 +473,6 @@ export function useAudioPlayer() {
                 const dur = event.target.getDuration();
                 if (dur && isFinite(dur)) setDuration(dur);
 
-                // Keep top-level silent audio anchor playing so our web app owns the notification
-                if (audioRef.current && audioRef.current.paused) {
-                  audioRef.current.play().catch(() => {});
-                }
 
                 // Assert our custom MediaSession metadata & playbackState
                 const currTrack = usePlayerStore.getState().currentTrack;
@@ -775,26 +768,11 @@ export function useAudioPlayer() {
       } else if (state === 'paused') {
         audioRef.current.pause();
       }
-    } else if (activeModeRef.current === 'youtube') {
-      if (state === 'playing') {
-        if (audioRef.current && audioRef.current.paused) {
-          audioRef.current.play().catch(() => {});
-        }
-        if (ytPlayerRef.current && isYtReadyRef.current) {
-          try {
-            ytPlayerRef.current.playVideo();
-          } catch {}
-        }
-      } else if (state === 'paused') {
-        if (audioRef.current && !audioRef.current.paused) {
-          audioRef.current.pause();
-        }
-        if (ytPlayerRef.current && isYtReadyRef.current) {
-          try {
-            ytPlayerRef.current.pauseVideo();
-          } catch {}
-        }
-      }
+    } else if (activeModeRef.current === 'youtube' && ytPlayerRef.current && isYtReadyRef.current) {
+      try {
+        if (state === 'playing') ytPlayerRef.current.playVideo();
+        else if (state === 'paused') ytPlayerRef.current.pauseVideo();
+      } catch {}
     }
   }, [state]);
 
@@ -934,18 +912,8 @@ export function useAudioPlayer() {
     const store = usePlayerStore.getState;
     const { pause, resume } = usePlayerStore.getState();
 
-    navigator.mediaSession.setActionHandler('play', () => {
-      if (activeModeRef.current === 'youtube' && audioRef.current && audioRef.current.paused) {
-        audioRef.current.play().catch(() => {});
-      }
-      resume();
-    });
-    navigator.mediaSession.setActionHandler('pause', () => {
-      if (activeModeRef.current === 'youtube' && audioRef.current && !audioRef.current.paused) {
-        audioRef.current.pause();
-      }
-      pause();
-    });
+    navigator.mediaSession.setActionHandler('play', () => resume());
+    navigator.mediaSession.setActionHandler('pause', () => pause());
     navigator.mediaSession.setActionHandler('previoustrack', () => store().previous());
     navigator.mediaSession.setActionHandler('nexttrack', () => store().next());
     navigator.mediaSession.setActionHandler('seekto', (details) => {
