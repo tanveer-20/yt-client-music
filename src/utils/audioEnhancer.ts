@@ -21,7 +21,18 @@ class StudioAudioDSP {
   init(audioEl: HTMLAudioElement) {
     if (this.isInitialized) return;
 
+    // Do not attach Web Audio API MediaElementSource to cross-origin elements without CORS,
+    // as it forces the audio node to output silence per the W3C Web Audio API specification.
     try {
+      if (
+        typeof window !== 'undefined' &&
+        audioEl.src &&
+        !audioEl.src.startsWith(window.location.origin) &&
+        !audioEl.crossOrigin
+      ) {
+        return;
+      }
+
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
 

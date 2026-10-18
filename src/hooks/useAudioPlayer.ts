@@ -121,13 +121,14 @@ export function useAudioPlayer() {
 
     const audio = new Audio();
     audio.preload = 'auto';
-    audio.crossOrigin = 'anonymous';
     audioRef.current = audio;
 
     const onPlay = () => {
       clearLoadingTimeout();
-      audioDSP.init(audio);
-      audioDSP.resume();
+      try {
+        audioDSP.init(audio);
+        audioDSP.resume();
+      } catch {}
       setState('playing');
     };
 
@@ -583,6 +584,12 @@ export function useAudioPlayer() {
           ytPlayerRef.current.stopVideo();
         } catch {}
       }
+      if ('mediaSession' in navigator) {
+        try {
+          navigator.mediaSession.playbackState = 'none';
+          navigator.mediaSession.metadata = null;
+        } catch {}
+      }
       return;
     }
 
@@ -783,7 +790,22 @@ export function useAudioPlayer() {
           const curr = ytPlayerRef.current.getCurrentTime();
           const dur = ytPlayerRef.current.getDuration();
           if (typeof curr === 'number' && isFinite(curr)) setProgress(curr);
-          if (typeof dur === 'number' && isFinite(dur) && dur > 0) setDuration(dur);
+          if (typeof dur === 'number' && isFinite(dur) && dur > 0) {
+            setDuration(dur);
+
+            // Report position to MediaSession so lock-screen seekbar shows real-time progress in YouTube mode
+            if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+              try {
+                if (typeof curr === 'number' && isFinite(curr) && curr >= 0) {
+                  navigator.mediaSession.setPositionState({
+                    duration: dur,
+                    playbackRate: 1,
+                    position: Math.min(curr, dur),
+                  });
+                }
+              } catch {}
+            }
+          }
 
           // Pre-fetch suggestions when 20 seconds remain on the last track in queue
           const store = usePlayerStore.getState();
@@ -849,11 +871,20 @@ export function useAudioPlayer() {
         navigator.mediaSession.playbackState = 'paused';
       } else if (s.state === 'idle') {
         navigator.mediaSession.playbackState = 'none';
+        try {
+          navigator.mediaSession.metadata = null;
+        } catch {}
       }
     });
 
     return () => {
       unsub();
+      if ('mediaSession' in navigator) {
+        try {
+          navigator.mediaSession.playbackState = 'none';
+          navigator.mediaSession.metadata = null;
+        } catch {}
+      }
       navigator.mediaSession.setActionHandler('play', null);
       navigator.mediaSession.setActionHandler('pause', null);
       navigator.mediaSession.setActionHandler('previoustrack', null);

@@ -137,17 +137,17 @@ export const usePlayerStore = create<PlayerStore>()(
                     });
                     get().next();
                   } else {
-                    set({ state: 'paused' });
+                    set({ state: 'idle' });
                   }
                 })
                 .catch(() => {
-                  set({ state: 'paused' });
+                  set({ state: 'idle' });
                 });
               return;
             }
 
             // End of queue, stop
-            set({ state: 'paused' });
+            set({ state: 'idle' });
             return;
           }
         }
