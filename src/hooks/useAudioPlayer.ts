@@ -150,6 +150,19 @@ export function useAudioPlayer() {
     const onTimeUpdate = () => {
       if (!isSeekingRef.current && activeModeRef.current === 'html5') {
         setProgress(audio.currentTime);
+
+        // Report position to MediaSession so lock-screen seekbar shows real-time progress
+        if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+          try {
+            if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
+              navigator.mediaSession.setPositionState({
+                duration: audio.duration,
+                playbackRate: audio.playbackRate || 1,
+                position: Math.min(audio.currentTime, audio.duration),
+              });
+            }
+          } catch {}
+        }
       }
     };
 
@@ -812,7 +825,7 @@ export function useAudioPlayer() {
     return () => clearInterval(ticker);
   }, [setProgress, setDuration]);
 
-  // ── MediaSession Handlers ──
+  // ── MediaSession Handlers + Playback State Sync ──
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
 
@@ -827,7 +840,20 @@ export function useAudioPlayer() {
       if (details.seekTime !== undefined) handleSeek(details.seekTime);
     });
 
+    // Sync playbackState so Chrome shows/hides the media notification correctly.
+    // Without this, metadata is set but Chrome doesn't know audio is active → no notification.
+    const unsub = usePlayerStore.subscribe((s) => {
+      if (s.state === 'playing') {
+        navigator.mediaSession.playbackState = 'playing';
+      } else if (s.state === 'paused') {
+        navigator.mediaSession.playbackState = 'paused';
+      } else if (s.state === 'idle') {
+        navigator.mediaSession.playbackState = 'none';
+      }
+    });
+
     return () => {
+      unsub();
       navigator.mediaSession.setActionHandler('play', null);
       navigator.mediaSession.setActionHandler('pause', null);
       navigator.mediaSession.setActionHandler('previoustrack', null);

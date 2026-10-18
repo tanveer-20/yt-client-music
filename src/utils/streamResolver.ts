@@ -181,25 +181,29 @@ async function resolveAndroidStream(videoId: string): Promise<string | null> {
 }
 
 /**
- * Fast Web stream resolver.
- * Attempts to resolve a direct stream within 1.8s so mobile web browsers can play
- * in background using native HTML5 <audio> + navigator.mediaSession.
+ * Web stream resolver — background-playback-capable.
+ * Tries each Piped instance with its own generous timeout so mobile web browsers
+ * can play via native HTML5 <audio> + navigator.mediaSession (background + lock-screen).
+ * Falls back to the app's own backend /api/stream endpoint before giving up.
  */
 async function resolveWebStream(videoId: string): Promise<string | null> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 1800);
-
+  // Try each Piped instance independently with a per-instance timeout.
+  // A global abort was killing all instances when one was slow — on mobile networks
+  // that's the common case, not the exception.
   for (const instance of PIPED_INSTANCES) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
       const res = await fetch(`${instance}/streams/${videoId}`, {
         signal: controller.signal,
         headers: { Accept: 'application/json' },
       });
+      clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
-        clearTimeout(timeoutId);
         const audioStreams = data.audioStreams || [];
         if (audioStreams.length > 0) {
+          // Prefer AAC (itag 140) on mobile — wider codec support than Opus
           const best =
             audioStreams.find((s: any) => s.itag === 140 && s.url) ||
             audioStreams.find((s: any) => s.itag === 251 && s.url) ||
@@ -210,10 +214,49 @@ async function resolveWebStream(videoId: string): Promise<string | null> {
         }
       }
     } catch {
-      // Continue to next instance
+      // This instance timed out or errored — try next
     }
   }
-  clearTimeout(timeoutId);
+
+  // Last resort: use the app's own backend stream endpoint.
+  // This is a proxied yt-dlp stream that works perfectly with HTML5 <audio>,
+  // enabling background playback where Piped instances failed.
+  try {
+    const backendBase = getBackendStreamBase();
+    if (backendBase) {
+      const probeUrl = `${backendBase}/stream/${videoId}`;
+      const probeController = new AbortController();
+      const probeTimeout = setTimeout(() => probeController.abort(), 3000);
+      const probe = await fetch(probeUrl, {
+        method: 'HEAD',
+        signal: probeController.signal,
+      });
+      clearTimeout(probeTimeout);
+      if (probe.ok || probe.status === 206) {
+        return probeUrl;
+      }
+    }
+  } catch {
+    // Backend unreachable — will fall through to YouTube iframe
+  }
+
+  return null;
+}
+
+/**
+ * Resolves the backend API stream base URL for the HEAD-probe fallback.
+ * Returns null if no backend is reachable (e.g. static deployment with no server).
+ */
+function getBackendStreamBase(): string | null {
+  const customUrl = useSettingsStore.getState().serverUrl?.trim();
+  if (customUrl) {
+    const clean = customUrl.replace(/\/+$/, '');
+    return clean.endsWith('/api') ? clean : `${clean}/api`;
+  }
+  // On same-origin deployments (Vercel, local dev), /api is the backend
+  if (typeof window !== 'undefined' && window.location) {
+    return `${window.location.origin}/api`;
+  }
   return null;
 }
 
