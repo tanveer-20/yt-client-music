@@ -287,14 +287,8 @@ export async function resolveStream(videoId: string): Promise<{ url: string | nu
     return { url: null, engine: 'youtube' };
   }
 
-  // 2. Web Browser -> Try HTML5 stream first (enables mobile background playback), fallback to YouTube iframe
-  try {
-    const webUrl = await resolveWebStream(videoId);
-    if (webUrl) {
-      return { url: webUrl, engine: 'html5' };
-    }
-  } catch {}
-
-  // Instant autonomous YouTube IFrame Engine fallback
+  // 2. Web Browser -> Instant zero-latency YouTube IFrame dispatch
+  // Eliminates 5+ seconds of blocking timeouts across dead/unreachable Piped/Invidious proxies.
+  // Preserves active mobile user gesture token so playback and media notification trigger immediately!
   return { url: null, engine: 'youtube' };
 }

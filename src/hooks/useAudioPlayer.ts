@@ -290,48 +290,19 @@ export function useAudioPlayer() {
         } catch {}
       }
 
-      // Check if YouTube player already has this exact playlist loaded
-      const isSamePlaylist =
-        loadedPlaylistIdsRef.current.length > 0 &&
-        loadedPlaylistIdsRef.current.length === queueIds.length &&
-        loadedPlaylistIdsRef.current.every((id, idx) => id === queueIds[idx]);
-
-      if (isSamePlaylist && typeof player.playVideoAt === 'function') {
-        try {
-          currentVideoIdRef.current = track.id;
-          player.playVideoAt(validIdx);
-          return;
-        } catch (e) {
-          console.warn('playVideoAt failed, falling back to loadPlaylist:', e);
+      // Instant direct track load — bypasses loadPlaylist metadata resolution delay
+      currentVideoIdRef.current = track.id;
+      try {
+        if (typeof player.loadVideoById === 'function') {
+          player.loadVideoById({ videoId: track.id, startSeconds: 0 });
+        } else if (typeof player.loadPlaylist === 'function') {
+          player.loadPlaylist([track.id], 0, 0);
         }
-      }
-
-      // If queue has multiple items, load the entire queue as YouTube native playlist!
-      if (queueIds.length > 1 && typeof player.loadPlaylist === 'function') {
-        loadedPlaylistIdsRef.current = queueIds;
-        currentVideoIdRef.current = track.id;
+      } catch (err) {
+        console.warn('Playback load failed:', err);
         try {
-          player.loadPlaylist(queueIds, validIdx, 0);
-        } catch (err) {
-          console.warn('loadPlaylist failed:', err);
-          try {
-            player.loadVideoById({ videoId: track.id, startSeconds: 0 });
-          } catch {}
-        }
-      } else {
-        // Single track
-        loadedPlaylistIdsRef.current = [track.id];
-        currentVideoIdRef.current = track.id;
-        try {
-          if (typeof player.loadPlaylist === 'function') {
-            player.loadPlaylist([track.id], 0, 0);
-          } else {
-            player.loadVideoById({ videoId: track.id, startSeconds: 0 });
-          }
-        } catch (err) {
-          console.warn('Playback load failed:', err);
-          setState('error');
-        }
+          player.playVideo();
+        } catch {}
       }
     },
     [setState]
