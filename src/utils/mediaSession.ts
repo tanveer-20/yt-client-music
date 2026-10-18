@@ -86,46 +86,39 @@ export function getOptimizedArtwork(thumbnailUrl?: string, videoId?: string): Me
     return artwork;
   }
 
-  // Case 2: YouTube Video Thumbnails (16:9 / 4:3) - provide exact dimensions so Android scales correctly
+  // Case 2: Standard YouTube video thumbnails
+  // Chrome on Android strictly looks for a 512x512 image in the array for lockscreen backgrounds.
+  // We MUST provide a guaranteed working image (200 OK) with 512x512 declaration.
+  // Note: maxresdefault.jpg returns 404 for 75%+ of YouTube videos and must NEVER be used.
   const id = videoId || (thumbnailUrl && thumbnailUrl.match(/vi\/([^/]+)/)?.[1]);
+  const primaryThumb = thumbnailUrl || (id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : '');
+
+  if (primaryThumb) {
+    artwork.push({
+      src: primaryThumb,
+      sizes: '512x512',
+      type: 'image/jpeg',
+    });
+    artwork.push({
+      src: primaryThumb,
+      sizes: '256x256',
+      type: 'image/jpeg',
+    });
+  }
+
   if (id) {
     artwork.push(
       {
-        src: `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`,
-        sizes: '1280x720',
-        type: 'image/jpeg',
-      },
-      {
-        src: `https://i.ytimg.com/vi/${id}/sddefault.jpg`,
-        sizes: '640x480',
-        type: 'image/jpeg',
-      },
-      {
-        src: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-        sizes: '480x360',
-        type: 'image/jpeg',
-      },
-      {
         src: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
-        sizes: '320x180',
+        sizes: '192x192',
         type: 'image/jpeg',
       },
       {
         src: `https://i.ytimg.com/vi/${id}/default.jpg`,
-        sizes: '120x90',
+        sizes: '96x96',
         type: 'image/jpeg',
       }
     );
-    return artwork;
-  }
-
-  // Fallback
-  if (thumbnailUrl) {
-    artwork.push({
-      src: thumbnailUrl,
-      sizes: '512x512',
-      type: 'image/jpeg',
-    });
   }
 
   return artwork;
@@ -184,6 +177,10 @@ export class MediaPositionTracker {
       return;
     }
 
+    // W3C MediaSession spec forbids playbackRate = 0 (throws TypeError)
+    const safePlaybackRate =
+      typeof playbackRate === 'number' && playbackRate > 0 ? playbackRate : 1;
+
     const clampedPosition = Math.max(0, Math.min(position, duration));
     const now = performance.now();
 
@@ -202,13 +199,13 @@ export class MediaPositionTracker {
     try {
       navigator.mediaSession.setPositionState({
         duration,
-        playbackRate,
+        playbackRate: safePlaybackRate,
         position: clampedPosition,
       });
       this.lastReportedTime = now;
       this.lastPosition = clampedPosition;
       this.lastDuration = duration;
-      this.lastPlaybackRate = playbackRate;
+      this.lastPlaybackRate = safePlaybackRate;
     } catch {
       // In some edge cases or browser tab visibility states, setPositionState might fail silently
     }

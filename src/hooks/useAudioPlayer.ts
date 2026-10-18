@@ -131,10 +131,20 @@ export function useAudioPlayer() {
 
     const onPlay = () => {
       clearLoadingTimeout();
-      try {
-        audioDSP.init(audio);
-        audioDSP.resume();
-      } catch {}
+      // On mobile browsers (like Brave on Android), avoid connecting HTML5 audio to
+      // Web Audio API createMediaElementSource. Android power management suspends
+      // AudioContext on screen lock/minimize, causing audio jitter and buffer underruns.
+      // Standard HTML5 <audio> without Web Audio routes directly to hardware AudioTrack DMA
+      // which has zero jitter when the screen is locked or Brave is minimized.
+      const isMobile =
+        typeof navigator !== 'undefined' &&
+        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (!isMobile) {
+        try {
+          audioDSP.init(audio);
+          audioDSP.resume();
+        } catch {}
+      }
       setState('playing');
       if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
         mediaPositionTracker.report(
@@ -151,8 +161,9 @@ export function useAudioPlayer() {
       if (usePlayerStore.getState().state !== 'loading') {
         setState('paused');
       }
+      // Never pass playbackRate: 0 (forbidden by W3C MediaSession spec)
       if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
-        mediaPositionTracker.report(audio.currentTime, audio.duration, 0, true);
+        mediaPositionTracker.report(audio.currentTime, audio.duration, 1, true);
       }
     };
 
@@ -169,8 +180,13 @@ export function useAudioPlayer() {
       if (!isSeekingRef.current && activeModeRef.current === 'html5') {
         setProgress(audio.currentTime);
 
-        // Smoothly throttled MediaSession position update (prevents scrubber micro-jitter)
-        if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
+        // Only report position to MediaSession during active playback
+        if (
+          audio.duration &&
+          isFinite(audio.duration) &&
+          audio.duration > 0 &&
+          usePlayerStore.getState().state === 'playing'
+        ) {
           mediaPositionTracker.report(
             audio.currentTime,
             audio.duration,
@@ -491,6 +507,24 @@ export function useAudioPlayer() {
                 clearLoadingTimeout();
                 if (!isInternalTransitionRef.current) {
                   const curState = usePlayerStore.getState().state;
+                  // Guard against background focus loss:
+                  // When the user locks the screen or minimizes Brave, YouTube's iframe
+                  // momentarily pauses due to window focus loss.
+                  // If the store is currently playing, immediately nudge YouTube to resume
+                  // so Brave's Background Play engine takes over without an audible stutter/jitter!
+                  if (
+                    typeof document !== 'undefined' &&
+                    document.visibilityState === 'hidden' &&
+                    curState === 'playing'
+                  ) {
+                    if (ytPlayerRef.current) {
+                      try {
+                        ytPlayerRef.current.playVideo();
+                      } catch {}
+                    }
+                    return;
+                  }
+
                   if (curState === 'loading') {
                     // Autoplay policy edge case: nudge play once
                     setTimeout(() => {
@@ -619,9 +653,6 @@ export function useAudioPlayer() {
       if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = createMediaMetadata(currentTrack);
       }
-      if (currentTrack.duration > 0) {
-        mediaPositionTracker.report(0, currentTrack.duration, 1, true);
-      }
       return;
     }
 
@@ -696,9 +727,6 @@ export function useAudioPlayer() {
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = createMediaMetadata(currentTrack);
     }
-    if (currentTrack.duration > 0) {
-      mediaPositionTracker.report(0, currentTrack.duration, 1, true);
-    }
   }, [currentTrack?.id, playRequestId, clearLoadingTimeout, playViaYouTube, setState, tryAlternativeTrack]);
 
   // ── Play / Pause state sync ──
@@ -768,9 +796,9 @@ export function useAudioPlayer() {
         } catch {}
       }
 
-      // Immediately force-update MediaSession position to make the seekbar responsive
+      // Immediately force-update MediaSession position to make the seekbar responsive during active playback
       const dur = usePlayerStore.getState().duration;
-      if (dur > 0) {
+      if (dur > 0 && usePlayerStore.getState().state === 'playing') {
         mediaPositionTracker.report(time, dur, 1, true);
       }
 
@@ -871,24 +899,24 @@ export function useAudioPlayer() {
     });
 
     // 5-action grid support for Android SystemUI notification layout:
-    // Registering seekbackward (-10s) and seekforward (+10s) creates a perfectly
-    // balanced, symmetrical 5-button control row with proper vertical spacing to the seekbar.
-    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-      const skip = details.seekOffset || 10;
-      const current = usePlayerStore.getState().progress;
-      handleSeek(Math.max(current - skip, 0));
-    });
+    // Registering seekbackward (-10s) and seekforward (+10s) creates a balanced,
+    // symmetrical 5-button control row with proper vertical spacing to the seekbar.
+    try {
+      navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+        const skip = (details && details.seekOffset) || 10;
+        const current = usePlayerStore.getState().progress;
+        handleSeek(Math.max(current - skip, 0));
+      });
+    } catch {}
 
-    navigator.mediaSession.setActionHandler('seekforward', (details) => {
-      const skip = details.seekOffset || 10;
-      const current = usePlayerStore.getState().progress;
-      const dur = usePlayerStore.getState().duration;
-      handleSeek(Math.min(current + skip, dur || Infinity));
-    });
-
-    navigator.mediaSession.setActionHandler('stop', () => {
-      usePlayerStore.getState().pause();
-    });
+    try {
+      navigator.mediaSession.setActionHandler('seekforward', (details) => {
+        const skip = (details && details.seekOffset) || 10;
+        const current = usePlayerStore.getState().progress;
+        const dur = usePlayerStore.getState().duration;
+        handleSeek(Math.min(current + skip, dur || Infinity));
+      });
+    } catch {}
 
     // Sync playbackState so Chrome shows/hides the media notification correctly.
     // Without this, metadata is set but Chrome doesn't know audio is active → no notification.
@@ -923,7 +951,6 @@ export function useAudioPlayer() {
         'seekto',
         'seekbackward',
         'seekforward',
-        'stop',
       ];
       actions.forEach((act) => {
         try {
