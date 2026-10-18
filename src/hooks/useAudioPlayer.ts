@@ -11,6 +11,12 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { getStreamUrl, searchTracks, getSuggestions } from '../utils/api';
 import { resolveStream } from '../utils/streamResolver';
 import { audioDSP } from '../utils/audioEnhancer';
+import {
+  createMediaMetadata,
+  mediaPositionTracker,
+  cleanTitle,
+  cleanArtist,
+} from '../utils/mediaSession';
 import type { Track } from '../types';
 
 const NativeAudio = registerPlugin<any>('NativeAudio');
@@ -130,12 +136,23 @@ export function useAudioPlayer() {
         audioDSP.resume();
       } catch {}
       setState('playing');
+      if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
+        mediaPositionTracker.report(
+          audio.currentTime,
+          audio.duration,
+          audio.playbackRate || 1,
+          true
+        );
+      }
     };
 
     const onPause = () => {
       clearLoadingTimeout();
       if (usePlayerStore.getState().state !== 'loading') {
         setState('paused');
+      }
+      if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
+        mediaPositionTracker.report(audio.currentTime, audio.duration, 0, true);
       }
     };
 
@@ -152,17 +169,14 @@ export function useAudioPlayer() {
       if (!isSeekingRef.current && activeModeRef.current === 'html5') {
         setProgress(audio.currentTime);
 
-        // Report position to MediaSession so lock-screen seekbar shows real-time progress
-        if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
-          try {
-            if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
-              navigator.mediaSession.setPositionState({
-                duration: audio.duration,
-                playbackRate: audio.playbackRate || 1,
-                position: Math.min(audio.currentTime, audio.duration),
-              });
-            }
-          } catch {}
+        // Smoothly throttled MediaSession position update (prevents scrubber micro-jitter)
+        if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
+          mediaPositionTracker.report(
+            audio.currentTime,
+            audio.duration,
+            audio.playbackRate || 1,
+            false
+          );
         }
       }
     };
@@ -320,13 +334,16 @@ export function useAudioPlayer() {
           if (Capacitor.isNativePlatform()) {
             NativeAudio.play({
               url: altStreamUrl,
-              title: alternative.title || 'Unknown Title',
-              artist: alternative.artist || 'Unknown Artist',
+              title: cleanTitle(alternative.title, alternative.artist),
+              artist: cleanArtist(alternative.artist),
               artworkUrl: alternative.thumbnail || '',
               loudnessDb: (alternative as any).loudnessDb ?? 0,
             }).catch(() => playViaYouTube(alternative));
           } else if (activeModeRef.current === 'html5' && audioRef.current) {
             audioRef.current.src = altStreamUrl;
+            if ('mediaSession' in navigator) {
+              navigator.mediaSession.metadata = createMediaMetadata(alternative);
+            }
             audioRef.current.play().catch(() => playViaYouTube(alternative));
           } else {
             playViaYouTube(alternative);
@@ -584,6 +601,7 @@ export function useAudioPlayer() {
           ytPlayerRef.current.stopVideo();
         } catch {}
       }
+      mediaPositionTracker.reset();
       if ('mediaSession' in navigator) {
         try {
           navigator.mediaSession.playbackState = 'none';
@@ -599,13 +617,10 @@ export function useAudioPlayer() {
       clearLoadingTimeout();
       currentVideoIdRef.current = currentTrack.id;
       if ('mediaSession' in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: currentTrack.title,
-          artist: currentTrack.artist,
-          artwork: currentTrack.thumbnail
-            ? [{ src: currentTrack.thumbnail, sizes: '512x512', type: 'image/jpeg' }]
-            : [],
-        });
+        navigator.mediaSession.metadata = createMediaMetadata(currentTrack);
+      }
+      if (currentTrack.duration > 0) {
+        mediaPositionTracker.report(0, currentTrack.duration, 1, true);
       }
       return;
     }
@@ -639,8 +654,8 @@ export function useAudioPlayer() {
           activeModeRef.current = 'native';
           NativeAudio.play({
             url,
-            title: currentTrack.title || 'Unknown Title',
-            artist: currentTrack.artist || 'Unknown Artist',
+            title: cleanTitle(currentTrack.title, currentTrack.artist),
+            artist: cleanArtist(currentTrack.artist),
             artworkUrl: currentTrack.thumbnail || '',
             loudnessDb: (currentTrack as any).loudnessDb ?? 0,
           })
@@ -677,15 +692,12 @@ export function useAudioPlayer() {
         playViaYouTube(currentTrack);
       });
 
-    // Update MediaSession
+    // Update MediaSession with clean title/artist, album, and multi-resolution artwork
     if ('mediaSession' in navigator) {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentTrack.title,
-        artist: currentTrack.artist,
-        artwork: currentTrack.thumbnail
-          ? [{ src: currentTrack.thumbnail, sizes: '512x512', type: 'image/jpeg' }]
-          : [],
-      });
+      navigator.mediaSession.metadata = createMediaMetadata(currentTrack);
+    }
+    if (currentTrack.duration > 0) {
+      mediaPositionTracker.report(0, currentTrack.duration, 1, true);
     }
   }, [currentTrack?.id, playRequestId, clearLoadingTimeout, playViaYouTube, setState, tryAlternativeTrack]);
 
@@ -756,6 +768,12 @@ export function useAudioPlayer() {
         } catch {}
       }
 
+      // Immediately force-update MediaSession position to make the seekbar responsive
+      const dur = usePlayerStore.getState().duration;
+      if (dur > 0) {
+        mediaPositionTracker.report(time, dur, 1, true);
+      }
+
       setTimeout(() => {
         isSeekingRef.current = false;
       }, 350);
@@ -793,18 +811,8 @@ export function useAudioPlayer() {
           if (typeof dur === 'number' && isFinite(dur) && dur > 0) {
             setDuration(dur);
 
-            // Report position to MediaSession so lock-screen seekbar shows real-time progress in YouTube mode
-            if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
-              try {
-                if (typeof curr === 'number' && isFinite(curr) && curr >= 0) {
-                  navigator.mediaSession.setPositionState({
-                    duration: dur,
-                    playbackRate: 1,
-                    position: Math.min(curr, dur),
-                  });
-                }
-              } catch {}
-            }
+            // Smoothly throttled MediaSession position update (prevents scrubber micro-jitter)
+            mediaPositionTracker.report(curr, dur, 1, false);
           }
 
           // Pre-fetch suggestions when 20 seconds remain on the last track in queue
@@ -862,6 +870,26 @@ export function useAudioPlayer() {
       if (details.seekTime !== undefined) handleSeek(details.seekTime);
     });
 
+    // 5-action grid support for Android SystemUI notification layout:
+    // Registering seekbackward (-10s) and seekforward (+10s) creates a perfectly
+    // balanced, symmetrical 5-button control row with proper vertical spacing to the seekbar.
+    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+      const skip = details.seekOffset || 10;
+      const current = usePlayerStore.getState().progress;
+      handleSeek(Math.max(current - skip, 0));
+    });
+
+    navigator.mediaSession.setActionHandler('seekforward', (details) => {
+      const skip = details.seekOffset || 10;
+      const current = usePlayerStore.getState().progress;
+      const dur = usePlayerStore.getState().duration;
+      handleSeek(Math.min(current + skip, dur || Infinity));
+    });
+
+    navigator.mediaSession.setActionHandler('stop', () => {
+      usePlayerStore.getState().pause();
+    });
+
     // Sync playbackState so Chrome shows/hides the media notification correctly.
     // Without this, metadata is set but Chrome doesn't know audio is active → no notification.
     const unsub = usePlayerStore.subscribe((s) => {
@@ -871,6 +899,7 @@ export function useAudioPlayer() {
         navigator.mediaSession.playbackState = 'paused';
       } else if (s.state === 'idle') {
         navigator.mediaSession.playbackState = 'none';
+        mediaPositionTracker.reset();
         try {
           navigator.mediaSession.metadata = null;
         } catch {}
@@ -879,17 +908,28 @@ export function useAudioPlayer() {
 
     return () => {
       unsub();
+      mediaPositionTracker.reset();
       if ('mediaSession' in navigator) {
         try {
           navigator.mediaSession.playbackState = 'none';
           navigator.mediaSession.metadata = null;
         } catch {}
       }
-      navigator.mediaSession.setActionHandler('play', null);
-      navigator.mediaSession.setActionHandler('pause', null);
-      navigator.mediaSession.setActionHandler('previoustrack', null);
-      navigator.mediaSession.setActionHandler('nexttrack', null);
-      navigator.mediaSession.setActionHandler('seekto', null);
+      const actions: MediaSessionAction[] = [
+        'play',
+        'pause',
+        'previoustrack',
+        'nexttrack',
+        'seekto',
+        'seekbackward',
+        'seekforward',
+        'stop',
+      ];
+      actions.forEach((act) => {
+        try {
+          navigator.mediaSession.setActionHandler(act, null);
+        } catch {}
+      });
     };
   }, [handleSeek]);
 
