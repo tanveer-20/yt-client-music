@@ -7,6 +7,15 @@ export interface MediaImage {
 }
 
 /**
+ * 231-byte valid silent MP3 frame data URI.
+ * Used as an audio anchor in the top-level document so that the top-level
+ * web application owns the Android MediaSession notification rather than
+ * relinquishing control to cross-origin invisible YouTube iframes.
+ */
+export const SILENT_AUDIO_URI =
+  'data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAAAAAAAAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9AQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/wMHCA=';
+
+/**
  * Strips distracting promotional and release noise from YouTube video titles
  * so the Media Notification / Lock Screen displays clean, legible song titles.
  *

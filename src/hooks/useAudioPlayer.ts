@@ -16,6 +16,7 @@ import {
   mediaPositionTracker,
   cleanTitle,
   cleanArtist,
+  SILENT_AUDIO_URI,
 } from '../utils/mediaSession';
 import type { Track } from '../types';
 
@@ -246,7 +247,18 @@ export function useAudioPlayer() {
 
       if (audioRef.current) {
         audioRef.current.pause();
-        audioRef.current.src = '';
+        audioRef.current.src = SILENT_AUDIO_URI;
+        audioRef.current.loop = true;
+        audioRef.current.volume = 0.001;
+        audioRef.current.play().catch(() => {});
+      }
+
+      // Immediately assert top-level MediaSession so Android displays our branded
+      // notification (clean title, clean artist, Rem Music album, 512x512 art)
+      // rather than the cross-origin YouTube iframe's raw un-styled notification
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = createMediaMetadata(track);
+        navigator.mediaSession.playbackState = 'playing';
       }
 
       const player = ytPlayerRef.current;
@@ -463,6 +475,22 @@ export function useAudioPlayer() {
                 setState('playing');
                 const dur = event.target.getDuration();
                 if (dur && isFinite(dur)) setDuration(dur);
+
+                // Keep top-level silent audio anchor playing so our web app owns the notification
+                if (audioRef.current && audioRef.current.paused) {
+                  audioRef.current.play().catch(() => {});
+                }
+
+                // Assert our custom MediaSession metadata & playbackState
+                const currTrack = usePlayerStore.getState().currentTrack;
+                if (currTrack && 'mediaSession' in navigator) {
+                  navigator.mediaSession.metadata = createMediaMetadata(currTrack);
+                  navigator.mediaSession.playbackState = 'playing';
+                }
+
+                if (dur && isFinite(dur) && dur > 0) {
+                  mediaPositionTracker.report(event.target.getCurrentTime() || 0, dur, 1, true);
+                }
 
                 // Sync volume
                 const { volume: curVol, isMuted: curMuted } = usePlayerStore.getState();
@@ -702,6 +730,7 @@ export function useAudioPlayer() {
         // Primary 2: Web Browser Studio DSP Engine
         else if (audioRef.current) {
           activeModeRef.current = 'html5';
+          audioRef.current.loop = false;
           audioRef.current.src = url;
           const { volume: curVol, isMuted: curMuted } = usePlayerStore.getState();
           audioRef.current.volume = curMuted ? 0 : curVol;
@@ -746,11 +775,26 @@ export function useAudioPlayer() {
       } else if (state === 'paused') {
         audioRef.current.pause();
       }
-    } else if (activeModeRef.current === 'youtube' && ytPlayerRef.current && isYtReadyRef.current) {
-      try {
-        if (state === 'playing') ytPlayerRef.current.playVideo();
-        else if (state === 'paused') ytPlayerRef.current.pauseVideo();
-      } catch {}
+    } else if (activeModeRef.current === 'youtube') {
+      if (state === 'playing') {
+        if (audioRef.current && audioRef.current.paused) {
+          audioRef.current.play().catch(() => {});
+        }
+        if (ytPlayerRef.current && isYtReadyRef.current) {
+          try {
+            ytPlayerRef.current.playVideo();
+          } catch {}
+        }
+      } else if (state === 'paused') {
+        if (audioRef.current && !audioRef.current.paused) {
+          audioRef.current.pause();
+        }
+        if (ytPlayerRef.current && isYtReadyRef.current) {
+          try {
+            ytPlayerRef.current.pauseVideo();
+          } catch {}
+        }
+      }
     }
   }, [state]);
 
@@ -890,8 +934,18 @@ export function useAudioPlayer() {
     const store = usePlayerStore.getState;
     const { pause, resume } = usePlayerStore.getState();
 
-    navigator.mediaSession.setActionHandler('play', () => resume());
-    navigator.mediaSession.setActionHandler('pause', () => pause());
+    navigator.mediaSession.setActionHandler('play', () => {
+      if (activeModeRef.current === 'youtube' && audioRef.current && audioRef.current.paused) {
+        audioRef.current.play().catch(() => {});
+      }
+      resume();
+    });
+    navigator.mediaSession.setActionHandler('pause', () => {
+      if (activeModeRef.current === 'youtube' && audioRef.current && !audioRef.current.paused) {
+        audioRef.current.pause();
+      }
+      pause();
+    });
     navigator.mediaSession.setActionHandler('previoustrack', () => store().previous());
     navigator.mediaSession.setActionHandler('nexttrack', () => store().next());
     navigator.mediaSession.setActionHandler('seekto', (details) => {
