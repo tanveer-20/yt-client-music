@@ -970,6 +970,11 @@ export function useAudioPlayer() {
         navigator.mediaSession.playbackState = 'playing';
       } else if (s.state === 'paused') {
         navigator.mediaSession.playbackState = 'paused';
+      } else if (s.state === 'loading') {
+        // Buffering: the silent anchor is already playing, so the session is live —
+        // report 'playing' (matches YouTube's own behavior while buffering) instead of
+        // letting playbackState go stale from a previous paused/idle state.
+        navigator.mediaSession.playbackState = 'playing';
       } else if (s.state === 'idle') {
         navigator.mediaSession.playbackState = 'none';
         mediaPositionTracker.reset();

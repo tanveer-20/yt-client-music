@@ -25,8 +25,8 @@
 let audioEl: HTMLAudioElement | null = null;
 let blobUrl: string | null = null;
 
-const SILENCE_SECONDS = 12; // Chrome needs >= 5s media duration to show a notification
-const SILENCE_SAMPLE_RATE = 8000; // 8000Hz * 8-bit mono * 12s ≈ 96KB — cheap to generate
+const SILENCE_SECONDS = 600; // long anchor so reported track durations never exceed it; Chrome needs >= 5s
+const SILENCE_SAMPLE_RATE = 8000; // 8000Hz * 8-bit mono * 600s ≈ 4.8MB — generated in-memory in milliseconds
 
 /**
  * Builds a PCM WAV Blob URL containing pure digital silence.
@@ -35,6 +35,8 @@ const SILENCE_SAMPLE_RATE = 8000; // 8000Hz * 8-bit mono * 12s ≈ 96KB — chea
 function buildSilentWavBlobUrl(): string {
   const frameCount = SILENCE_SAMPLE_RATE * SILENCE_SECONDS;
   const buffer = new ArrayBuffer(44 + frameCount);
+  const bytes = new Uint8Array(buffer);
+  bytes.fill(128); // 8-bit unsigned silence = 128 (header fields overwritten below)
   const view = new DataView(buffer);
 
   const writeAscii = (offset: number, s: string) => {
@@ -54,7 +56,6 @@ function buildSilentWavBlobUrl(): string {
   view.setUint16(34, 8, true); // bits per sample
   writeAscii(36, 'data');
   view.setUint32(40, frameCount, true);
-  for (let i = 0; i < frameCount; i++) view.setUint8(44 + i, 128);
 
   return URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
 }
