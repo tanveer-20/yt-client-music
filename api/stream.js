@@ -96,6 +96,11 @@ const CLIENTS = [
     // host is NOT bot-walled from Vercel's datacenter IPs for months. WEB_REMIX
     // sometimes returns plain URLs for audio itags; if formats come back
     // signatureCipher-ed we record a distinct reason for future escalation.
+  {
+    // music.youtube.com host: api/search.js + api/suggestions.js have proven this
+    // host is NOT bot-walled from Vercel's datacenter IPs for months. WEB_REMIX
+    // sometimes returns plain URLs for audio itags; if formats come back
+    // signatureCipher-ed we record a distinct reason for future escalation.
     name: 'WEB_REMIX',
     version: '1.20250914.01.00',
     userAgent:
@@ -104,6 +109,37 @@ const CLIENTS = [
     url: MUSIC_PLAYER_URL,
     origin: 'https://music.youtube.com',
     referer: 'https://music.youtube.com/',
+  },
+  {
+    // googleapis.com host variant for the best mobile client — enforcement can
+    // differ between www.youtube.com and the Google API edge domain.
+    name: 'ANDROID_VR_GOOGLEAPIS',
+    version: '1.65.10',
+    userAgent:
+      'com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip',
+    clientNameHeader: '28',
+    url: 'https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false',
+    extraContext: {
+      deviceMake: 'Oculus',
+      deviceModel: 'Quest 3',
+      androidSdkVersion: 32,
+      osName: 'Android',
+      osVersion: '12L',
+    },
+  },
+  {
+    name: 'WEB_EMBEDDED_PLAYER',
+    version: '1.20250918.02.00',
+    userAgent:
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
+    clientNameHeader: '56',
+    url: PLAYER_URL,
+    extraContext: {
+      clientScreen: 'EMBED',
+      thirdParty: {
+        embedUrl: 'https://rem-mocha.vercel.app',
+      },
+    },
   },
 ];
 
