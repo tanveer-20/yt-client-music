@@ -69,7 +69,12 @@ function getElement(): HTMLAudioElement {
     audioEl.preload = 'auto';
     audioEl.setAttribute('aria-hidden', 'true');
     audioEl.setAttribute('data-silent-session', 'true');
+    // Must live in the document tree for the browser to include it in the
+    // top-level media session (detached Audio() objects are excluded in Gecko).
     audioEl.style.display = 'none';
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.appendChild(audioEl);
+    }
   }
   return audioEl;
 }
@@ -104,6 +109,10 @@ export function primeSilentAudio(): void {
 export function startSilentAudio(): void {
   try {
     const a = getElement();
+    // Safety: ensure it is attached even if first created before <body> existed.
+    if (!a.isConnected && typeof document !== 'undefined' && document.body) {
+      document.body.appendChild(a);
+    }
     if (!a.paused) return;
     const p = a.play();
     if (p && typeof p.catch === 'function') {
