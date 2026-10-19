@@ -4,6 +4,19 @@
 `docs/research/client-only-architecture-analysis.md` (§2.3, "Why Vercel Serverless Functions
 Cannot Proxy Full Audio Streams").
 
+**Deployment update (2026-10-19, live-measured)**: the proxy shipped and is correct end-to-end
+(20/20 local range/CORS/HEAD checks), but YouTube's attestation wall rejects `/player`
+resolution from Vercel's datacenter egress for essentially every track: VISIONOS, ANDROID_VR,
+IOS and WEB_REMIX (music host) all return `LOGIN_REQUIRED`; ANDROID_TESTSUITE `UNPLAYABLE`;
+TVHTML5 "no longer supported"; the `youtubei.googleapis.com` host and `WEB_EMBEDDED_PLAYER`
+tickets don't break the wall either. Session rotation + cookies/visitorData flow is
+implemented and works from residential IPs, but does not change the datacenter verdict.
+Deployed behavior therefore degrades exactly one step behind: first HEAD probe fast-fails
+(~7s once, then 12h per-backend dead-cache), and playback falls back to the YouTube iframe
+engine — i.e. never worse than the pre-proxy baseline. Full background playback on mobile
+Chrome requires a resolver on a trusted IP: on-device (APK path — implemented) or a
+residential/hosted resolver per ADR-0002.
+
 ## Context
 
 On the deployed web app, playback fell back to a hidden cross-origin YouTube iframe whenever
