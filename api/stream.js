@@ -96,7 +96,6 @@ const CLIENTS = [
     // host is NOT bot-walled from Vercel's datacenter IPs for months. WEB_REMIX
     // sometimes returns plain URLs for audio itags; if formats come back
     // signatureCipher-ed we record a distinct reason for future escalation.
-  {
     // music.youtube.com host: api/search.js + api/suggestions.js have proven this
     // host is NOT bot-walled from Vercel's datacenter IPs for months. WEB_REMIX
     // sometimes returns plain URLs for audio itags; if formats come back
