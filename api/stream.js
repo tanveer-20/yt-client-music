@@ -30,6 +30,7 @@ const PAGE_UA =
 
 // InnerTube clients — mirrors current yt-dlp configs. VISIONOS and ANDROID_VR
 // return plain (non-ciphered) audio URLs when the visitor session is present.
+const MUSIC_PLAYER_URL = 'https://music.youtube.com/youtubei/v1/player?prettyPrint=false';
 const CLIENTS = [
   {
     name: 'VISIONOS',
@@ -71,6 +72,39 @@ const CLIENTS = [
       osVersion: '18.3.2.22D82',
     },
   },
+  {
+    name: 'ANDROID_TESTSUITE',
+    version: '1.9',
+    userAgent: 'Google-Test-Suite',
+    clientNameHeader: '162',
+    url: PLAYER_URL,
+  },
+  {
+    name: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+    version: '2.0',
+    userAgent: 'Mozilla/5.0 (PlayStation; PlayStation 4/10.01)',
+    clientNameHeader: '85',
+    url: PLAYER_URL,
+    extraContext: {
+      thirdParty: {
+        embedUrl: 'https://www.youtube.com',
+      },
+    },
+  },
+  {
+    // music.youtube.com host: api/search.js + api/suggestions.js have proven this
+    // host is NOT bot-walled from Vercel's datacenter IPs for months. WEB_REMIX
+    // sometimes returns plain URLs for audio itags; if formats come back
+    // signatureCipher-ed we record a distinct reason for future escalation.
+    name: 'WEB_REMIX',
+    version: '1.20250914.01.00',
+    userAgent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    clientNameHeader: '67',
+    url: MUSIC_PLAYER_URL,
+    origin: 'https://music.youtube.com',
+    referer: 'https://music.youtube.com/',
+  },
 ];
 
 // Warm-instance caches. Best effort only — serverless instances recycle.
@@ -97,9 +131,15 @@ function pruneCache() {
  * Establish a YouTube visitor session: cookies + VISITOR_DATA from the watch page.
  * This is what makes InnerTube accept the player call from a server.
  */
-async function getVisitorSession(videoId) {
-  if (visitorSession && visitorSession.expiresAt > Date.now()) {
+async function getVisitorSession(videoId, { force = false } = {}) {
+  if (!force && visitorSession && visitorSession.expiresAt > Date.now()) {
     return visitorSession;
+  }
+  if (force) {
+    // A flagged/stale session poisons every player call that reuses it — drop it
+    // so the next attempt re-establishes from a brand-new watch-page fetch.
+    visitorSession = null;
+    visitorSessionPromise = null;
   }
   if (visitorSessionPromise) return visitorSessionPromise;
 
@@ -190,26 +230,38 @@ async function resolveAudio(videoId) {
     return { entry: null, reason: 'visitor_session_failed' };
   }
 
-  let lastReason = 'no_clients_responded';
+  const reasons = [];
 
-  for (const client of CLIENTS) {
+  for (let i = 0; i < CLIENTS.length; i++) {
+    const client = CLIENTS[i];
+
+    // Rotate the visitor session for every attempt after the first. A session
+    // minted alongside a bot-flagged player response stays poisoned for its
+    // lifetime, so each new client attempt gets its own fresh watch-page seed.
+    if (i > 0) {
+      try {
+        session = await getVisitorSession(videoId, { force: true });
+      } catch {
+        // keep the previous session rather than aborting the whole resolve
+      }
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
       const cookie = [session.cookies, 'PREF=hl=en&tz=UTC', 'SOCS=CAI']
         .filter(Boolean)
         .join('; ');
-      const response = await fetch(PLAYER_URL, {
+      const response = await fetch(client.url || PLAYER_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': client.userAgent,
           'X-YouTube-Client-Name': client.clientNameHeader,
           'X-YouTube-Client-Version': client.version,
-          ...(session.visitorData
-            ? { 'X-Goog-Visitor-Id': session.visitorData }
-            : {}),
-          Origin: 'https://www.youtube.com',
+          ...(session.visitorData ? { 'X-Goog-Visitor-Id': session.visitorData } : {}),
+          Origin: client.origin || 'https://www.youtube.com',
+          ...(client.referer ? { Referer: client.referer } : {}),
           'Accept-Language': 'en-us,en;q=0.5',
           Cookie: cookie,
         },
@@ -242,8 +294,9 @@ async function resolveAudio(videoId) {
       clearTimeout(timer);
 
       if (!response.ok) {
-        lastReason = `${client.name}_http_${response.status}`;
-        console.log(`[stream] ${videoId}: ${lastReason}`);
+        const reason = `${client.name}_http_${response.status}`;
+        reasons.push(reason);
+        console.log(`[stream] ${videoId}: ${reason}`);
         continue;
       }
 
@@ -251,10 +304,11 @@ async function resolveAudio(videoId) {
       const format = pickAudioFormat(data && data.streamingData);
       if (!format) {
         const playability = (data && data.playabilityStatus) || {};
-        lastReason = `${client.name}_${playability.status || 'no_formats'}${
+        const reason = `${client.name}_${playability.status || 'no_formats'}${
           playability.reason ? `_${playability.reason}` : ''
         }`;
-        console.log(`[stream] ${videoId}: ${lastReason}`);
+        reasons.push(reason);
+        console.log(`[stream] ${videoId}: ${reason}`);
         continue;
       }
 
@@ -269,16 +323,17 @@ async function resolveAudio(videoId) {
       return { entry };
     } catch (error) {
       clearTimeout(timer);
-      lastReason = `${client.name}_${
+      const reason = `${client.name}_${
         error && error.name === 'AbortError' ? 'timeout' : 'error'
       }`;
-      console.log(`[stream] ${videoId}: ${lastReason} (${error && error.message})`);
+      reasons.push(reason);
+      console.log(`[stream] ${videoId}: ${reason} (${error && error.message})`);
     }
   }
 
   // A stale visitor session is the usual reason every client suddenly fails.
   visitorSession = null;
-  return { entry: null, reason: lastReason };
+  return { entry: null, reason: reasons[reasons.length - 1] || 'no_clients_responded', reasons };
 }
 
 // Cap every proxied response to CHUNK_BYTES. The media element sees the full resource
@@ -355,6 +410,9 @@ export default async function handler(req, res) {
       return sendJson(res, 502, {
         error: 'resolution_failed',
         reason: resolved.reason || 'unknown',
+        ...(resolved.reasons && resolved.reasons.length > 0
+          ? { reasons: resolved.reasons }
+          : {}),
       });
     }
 
@@ -379,6 +437,9 @@ export default async function handler(req, res) {
         return sendJson(res, 502, {
           error: 'resolution_failed',
           reason: resolved.reason || 'stale_url',
+          ...(resolved.reasons && resolved.reasons.length > 0
+            ? { reasons: resolved.reasons }
+            : {}),
         });
       }
       upstream = await fetchUpstream(resolved.entry, range);
