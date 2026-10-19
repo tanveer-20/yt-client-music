@@ -117,7 +117,8 @@ const CLIENTS = [
     userAgent:
       'com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip',
     clientNameHeader: '28',
-    url: 'https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false',
+    url:
+      'https://youtubei.googleapis.com/youtubei/v1/player?key=AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w&prettyPrint=false',
     extraContext: {
       deviceMake: 'Oculus',
       deviceModel: 'Quest 3',
