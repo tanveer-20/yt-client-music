@@ -17,6 +17,12 @@ import {
   cleanTitle,
   cleanArtist,
 } from '../utils/mediaSession';
+import {
+  primeSilentAudio,
+  startSilentAudio,
+  pauseSilentAudio,
+  stopSilentAudio,
+} from '../utils/silentAudio';
 import type { Track } from '../types';
 
 const NativeAudio = registerPlugin<any>('NativeAudio');
@@ -120,6 +126,31 @@ export function useAudioPlayer() {
       if (progressTimer) clearInterval(progressTimer);
     };
   }, [clearLoadingTimeout, setDuration, setProgress, setState]);
+
+  // ── Silent session anchor: prime autoplay permission on first user gesture ──
+  // A successful play() inside a gesture grants this silent element autoplay rights
+  // for the whole session. Prime once on the first pointerdown anywhere on the page,
+  // then play-then-immediately-pause so no notification leaks before a track plays.
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) return;
+
+    let done = false;
+    const prime = () => {
+      if (done) return;
+      done = true;
+      window.removeEventListener('pointerdown', prime, true);
+      window.removeEventListener('keydown', prime, true);
+      primeSilentAudio();
+    };
+    window.addEventListener('pointerdown', prime, true);
+    window.addEventListener('keydown', prime, true);
+
+    return () => {
+      window.removeEventListener('pointerdown', prime, true);
+      window.removeEventListener('keydown', prime, true);
+      stopSilentAudio();
+    };
+  }, []);
 
   // ── Create and configure persistent HTML5 Audio Element with Studio DSP (Web) ──
   useEffect(() => {
@@ -257,6 +288,14 @@ export function useAudioPlayer() {
         navigator.mediaSession.metadata = createMediaMetadata(track);
         navigator.mediaSession.playbackState = 'playing';
       }
+
+      // ── Silent top-level session anchor ──
+      // Chrome/Firefox attach the media notification to the context that owns
+      // *playing* media. Our audible stream lives in the cross-origin YouTube iframe,
+      // so the top-level session is dormant and the notification never shows. This
+      // silent looping <audio> (top-level document) makes the top-level session real,
+      // letting the metadata we just asserted actually drive the notification.
+      startSilentAudio();
 
       const player = ytPlayerRef.current;
       if (!player || !isYtReadyRef.current) {
@@ -627,6 +666,7 @@ export function useAudioPlayer() {
           ytPlayerRef.current.stopVideo();
         } catch {}
       }
+      stopSilentAudio();
       mediaPositionTracker.reset();
       if ('mediaSession' in navigator) {
         try {
@@ -694,6 +734,9 @@ export function useAudioPlayer() {
         // Primary 2: Web Browser Studio DSP Engine
         else if (audioRef.current) {
           activeModeRef.current = 'html5';
+          // The real top-level <audio> now owns the media session itself;
+          // hand over from the silent anchor so only one element drives it.
+          pauseSilentAudio();
           audioRef.current.loop = false;
           audioRef.current.src = url;
           const { volume: curVol, isMuted: curMuted } = usePlayerStore.getState();
@@ -734,16 +777,25 @@ export function useAudioPlayer() {
     }
 
     if (activeModeRef.current === 'html5' && audioRef.current) {
+      pauseSilentAudio(); // real top-level <audio> owns the notification now
       if (state === 'playing') {
         audioRef.current.play().catch(() => {});
       } else if (state === 'paused') {
         audioRef.current.pause();
       }
-    } else if (activeModeRef.current === 'youtube' && ytPlayerRef.current && isYtReadyRef.current) {
-      try {
-        if (state === 'playing') ytPlayerRef.current.playVideo();
-        else if (state === 'paused') ytPlayerRef.current.pauseVideo();
-      } catch {}
+    } else if (activeModeRef.current === 'youtube') {
+      if (ytPlayerRef.current && isYtReadyRef.current) {
+        try {
+          if (state === 'playing') ytPlayerRef.current.playVideo();
+          else if (state === 'paused') ytPlayerRef.current.pauseVideo();
+        } catch {}
+      }
+      // Keep the silent session anchor's PLAYING state in lock-step with the player:
+      // playing → anchor playing (notification exists),
+      // paused → anchor paused (notification stays, shows a play button),
+      // loading → anchor playing (notification appears immediately on first play).
+      if (state === 'playing' || state === 'loading') startSilentAudio();
+      else pauseSilentAudio();
     }
   }, [state]);
 
@@ -930,6 +982,7 @@ export function useAudioPlayer() {
     return () => {
       unsub();
       mediaPositionTracker.reset();
+      stopSilentAudio();
       if ('mediaSession' in navigator) {
         try {
           navigator.mediaSession.playbackState = 'none';
