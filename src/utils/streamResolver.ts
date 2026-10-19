@@ -7,9 +7,10 @@
  *    via ExoPlayer in PlaybackService (MediaSession foreground service with lockscreen controls).
  *    Fallback to public Piped streaming endpoints guarantees 100% background playback.
  *
- * 2. On Web Browser: Attempts high-speed direct audio stream extraction for HTML5 <audio>
- *    to enable background and lock-screen playback via navigator.mediaSession.
- *    Instantly falls back to YouTube IFrame player if resolution times out.
+ * 2. On Web Browser: Uses the same-origin /api/stream proxy where deployed (InnerTube-resolved,
+ *    CORS-enabled, Range-capable audio) so the HTML5 <audio> engine can own playback —
+ *    enabling background playback and lock-screen controls via navigator.mediaSession.
+ *    Piped instances are an opportunistic fallback; the YouTube IFrame player is the last resort.
  */
 
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
@@ -182,71 +183,148 @@ async function resolveAndroidStream(videoId: string): Promise<string | null> {
   return null;
 }
 
+// Hedge against backends that cannot resolve streams (YouTube's bot wall does reject
+// some datacenter egress): cache a failure per backend for 12h so we don't pay the
+// probe stall on every track — the first play falls back, everything after is instant.
+const BACKEND_DEAD_TTL_MS = 12 * 60 * 60 * 1000;
+const BACKEND_DEAD_KEY = 'rem:stream-backend-dead';
+
+function readBackendDead(): Record<string, number> {
+  try {
+    return JSON.parse(localStorage.getItem(BACKEND_DEAD_KEY) || '{}') || {};
+  } catch {
+    return {};
+  }
+}
+
+function isBackendDead(base: string): boolean {
+  const dead = readBackendDead();
+  return (dead[base] || 0) > Date.now();
+}
+
+function markBackendDead(base: string): void {
+  try {
+    const dead = readBackendDead();
+    dead[base] = Date.now() + BACKEND_DEAD_TTL_MS;
+    localStorage.setItem(BACKEND_DEAD_KEY, JSON.stringify(dead));
+  } catch {
+    // Private mode / storage disabled — fall back to in-memory behaviour
+  }
+}
+
+function clearBackendDead(base: string): void {
+  try {
+    const dead = readBackendDead();
+    if (!(base in dead)) return;
+    delete dead[base];
+    localStorage.setItem(BACKEND_DEAD_KEY, JSON.stringify(dead));
+  } catch {}
+}
+
 /**
  * Web stream resolver — background-playback-capable.
- * Tries each Piped instance with its own generous timeout so mobile web browsers
- * can play via native HTML5 <audio> + navigator.mediaSession (background + lock-screen).
- * Falls back to the app's own backend /api/stream endpoint before giving up.
+ * 1. Backend /api/stream proxy (same-origin on local dev/self-hosted, or the custom
+ *    server from Settings): InnerTube-resolved, CORS-enabled, Range-capable audio for
+ *    HTML5 <audio> → mobile background playback + lock-screen controls (our notification).
+ * 2. Public Piped instances — opportunistic free fallback (all verified dead as of 2026).
+ * Returns null when everything fails, so the caller falls back to the YouTube iframe.
  */
 async function resolveWebStream(videoId: string): Promise<string | null> {
-  // Tier 1: App's own high-performance backend stream endpoint (instant 256kbps audio)
-  try {
-    const backendBase = getBackendStreamBase();
-    if (backendBase) {
-      const probeUrl = `${backendBase}/stream/${videoId}`;
-      const probeController = new AbortController();
-      const probeTimeout = setTimeout(() => probeController.abort(), 1200);
+  const backendBase = getBackendStreamBase();
+
+  // 1. Backend stream proxy. A HEAD probe validates that the proxy can actually resolve
+  //    this track before committing to the HTML5 engine.
+  if (backendBase && !isBackendDead(backendBase)) {
+    const probeUrl = `${backendBase}/stream/${videoId}`;
+    const probeController = new AbortController();
+    const probeTimeout = setTimeout(() => probeController.abort(), 8000);
+    try {
       const probe = await fetch(probeUrl, {
         method: 'HEAD',
         signal: probeController.signal,
       });
-      clearTimeout(probeTimeout);
       if (probe.ok || probe.status === 206) {
+        clearBackendDead(backendBase);
         return probeUrl;
       }
+      // 400/404 mean this specific track is bad — don't condemn the whole backend.
+      // 5xx means the proxy itself cannot resolve (IP block / YouTube rejection).
+      if (probe.status >= 500) markBackendDead(backendBase);
+    } catch {
+      markBackendDead(backendBase);
+    } finally {
+      clearTimeout(probeTimeout);
     }
-  } catch {
-    // Backend unreachable — check next tiers
   }
 
-  // Tier 2: Public Piped Instances (quick probe with 1.5s timeout)
-  for (const instance of PIPED_INSTANCES) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1500);
-      const res = await fetch(`${instance}/streams/${videoId}`, {
-        signal: controller.signal,
-        headers: { Accept: 'application/json' },
-      });
-      clearTimeout(timeoutId);
-      if (res.ok) {
-        const data = await res.json();
-        const audioStreams = data.audioStreams || [];
-        if (audioStreams.length > 0) {
-          const best =
-            audioStreams.find((s: any) => s.itag === 140 && s.url) ||
-            audioStreams.find((s: any) => s.itag === 251 && s.url) ||
-            audioStreams[0];
-          if (best && best.url) {
-            return best.url;
+  // 2. Public Piped instances, raced in parallel with a single short deadline.
+  //    (Sequentially probing three dead instances cost 4.5s of first-play delay.)
+  if (!backendBase || !isBackendDead(backendBase)) {
+    const piped = await Promise.race([
+      Promise.allSettled(
+        PIPED_INSTANCES.map(async (instance) => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 1800);
+          try {
+            const res = await fetch(`${instance}/streams/${videoId}`, {
+              signal: controller.signal,
+              headers: { Accept: 'application/json' },
+            });
+            if (!res.ok) return null;
+            const data = await res.json();
+            const audioStreams = data.audioStreams || [];
+            if (audioStreams.length === 0) return null;
+            const best =
+              audioStreams.find((s: any) => s.itag === 140 && s.url) ||
+              audioStreams.find((s: any) => s.itag === 251 && s.url) ||
+              audioStreams[0];
+            return best && best.url ? best.url : null;
+          } catch {
+            return null;
+          } finally {
+            clearTimeout(timeoutId);
           }
+        })
+      ).then((results) => {
+        for (const result of results) {
+          if (result.status === 'fulfilled' && result.value) return result.value;
         }
-      }
-    } catch {
-      // Continue to next instance
-    }
+        return null;
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2200)),
+    ]);
+    if (piped) return piped;
   }
 
   return null;
 }
 
 /**
- * Resolves the backend API stream base URL for the HEAD-probe fallback.
- * Returns null if no backend is reachable (e.g. static deployment with no server).
+ * A plain-http custom server cannot be reached from an https:// page (mixed-content
+ * block), so ignore such settings on web and fall through to the same-origin backend.
+ * Native (Capacitor) uses native sockets, where http is fine.
+ */
+function isCustomServerUsable(customUrl: string): boolean {
+  if (Capacitor.isNativePlatform()) return true;
+  try {
+    const url = new URL(customUrl);
+    const pageIsHttps =
+      typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const isLocal = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+    if (pageIsHttps && url.protocol === 'http:' && !isLocal) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolves the backend API stream base URL.
+ * Returns null if no backend is usable (e.g. static deployment with no server).
  */
 function getBackendStreamBase(): string | null {
   const customUrl = useSettingsStore.getState().serverUrl?.trim();
-  if (customUrl) {
+  if (customUrl && isCustomServerUsable(customUrl)) {
     const clean = customUrl.replace(/\/+$/, '');
     return clean.endsWith('/api') ? clean : `${clean}/api`;
   }
@@ -262,13 +340,14 @@ function getBackendStreamBase(): string | null {
  * Resolves the best available playback URL:
  * 1. Custom backend URL if configured in Settings.
  * 2. On Android: Direct on-device streaming URL from YouTube CDN (native ExoPlayer in PlaybackService).
- * 3. On Web: Direct stream for HTML5 <audio> (background-capable) or instant YouTube IFrame fallback.
+ * 3. On Web: Backend /api/stream proxy → HTML5 <audio> (background-capable); YouTube iframe fallback.
  */
 export async function resolveStream(videoId: string): Promise<{ url: string | null; engine: 'native' | 'html5' | 'youtube' }> {
   const customUrl = useSettingsStore.getState().serverUrl?.trim();
 
-  // If user explicitly configured a custom server, use it
-  if (customUrl) {
+  // If user explicitly configured a custom server, use it — unless it's unreachable
+  // from this page (http:// server on an https:// page is blocked as mixed content).
+  if (customUrl && isCustomServerUsable(customUrl)) {
     const clean = customUrl.replace(/\/+$/, '');
     const base = clean.endsWith('/api') ? clean : `${clean}/api`;
     return {
@@ -287,8 +366,12 @@ export async function resolveStream(videoId: string): Promise<{ url: string | nu
     return { url: null, engine: 'youtube' };
   }
 
-  // 2. Web Browser -> Instant zero-latency YouTube IFrame dispatch
-  // Eliminates 5+ seconds of blocking timeouts across dead/unreachable Piped/Invidious proxies.
-  // Preserves active mobile user gesture token so playback and media notification trigger immediately!
+  // 2. Web Browser -> /api/stream proxy so the top-level HTML5 <audio> element owns
+  // playback (background playback + app-owned MediaSession notification). Falls back
+  // to the YouTube IFrame player only when no stream URL can be resolved.
+  const webUrl = await resolveWebStream(videoId);
+  if (webUrl) {
+    return { url: webUrl, engine: 'html5' };
+  }
   return { url: null, engine: 'youtube' };
 }
