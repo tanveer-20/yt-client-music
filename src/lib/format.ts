@@ -10,8 +10,9 @@ export function formatTime(seconds: number | undefined | null): string {
 }
 
 export function formatLongTime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.round((seconds % 3600) / 60);
+  const totalMinutes = Math.max(0, Math.round((Number.isFinite(seconds) ? seconds : 0) / 60));
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
   if (h > 0) return `${h} hr ${m} min`;
   return `${m} min`;
 }

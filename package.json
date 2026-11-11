@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview",
     "server": "cd server && npm run dev",
     "dev:all": "concurrently -n client,server -c blue,green \"npm run dev\" \"npm run server\"",

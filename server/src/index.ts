@@ -24,12 +24,12 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
 
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'HEAD', 'OPTIONS'],
-  allowedHeaders: ['Range', 'Content-Type'],
-  exposedHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges'],
+  methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Range', 'Content-Type', 'Authorization', 'Accept'],
+  exposedHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges', 'X-Loudness-Db'],
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '256kb' }));
 
 // Request logging
 app.use((req, _res, next) => {

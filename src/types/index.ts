@@ -1,3 +1,5 @@
+export type TrackSource = 'youtube' | 'addon' | 'direct';
+
 export interface Track {
   id: string;
   title: string;
@@ -9,6 +11,12 @@ export interface Track {
   year?: string;
   albumId?: string;
   artistId?: string;
+  /** Where the audio comes from. Defaults to the YouTube proxy. */
+  source?: TrackSource;
+  /** Resolved, source-specific audio URL. Addon and direct tracks provide this. */
+  streamUrl?: string;
+  /** Addon that supplied the track, when source is "addon". */
+  addonId?: string;
 }
 
 export type MediaKind = 'album' | 'artist' | 'playlist' | 'track' | 'video';

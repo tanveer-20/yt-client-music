@@ -186,7 +186,7 @@ export class PlaybackEngine {
     const store = usePlayerStore.getState();
 
     el.pause();
-    el.src = streamUrl(track.id);
+    el.src = this.resolveStream(track);
     el.load();
     el.playbackRate = store.playbackRate;
     this.setLevel(this.active, this.effectiveVolume());
@@ -280,7 +280,7 @@ export class PlaybackEngine {
 
     this.ensureGraph();
     idle.pause();
-    idle.src = streamUrl(nextTrack.id);
+    idle.src = this.resolveStream(nextTrack);
     idle.load();
     idle.playbackRate = state.playbackRate;
     this.setLevel(to, 0);
@@ -461,6 +461,12 @@ export class PlaybackEngine {
     const el = id === 'a' ? this.deckA : this.deckB;
     if (!el) throw new Error('Playback deck missing');
     return el;
+  }
+
+  /** Resolve the audio URL for a track, supporting addon and direct sources. */
+  private resolveStream(track: Track): string {
+    if (track.streamUrl) return track.streamUrl;
+    return streamUrl(track.id);
   }
 
   private otherDeck(id: DeckId): DeckId {
