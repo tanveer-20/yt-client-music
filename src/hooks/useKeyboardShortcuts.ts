@@ -1,77 +1,75 @@
-/**
- * useKeyboardShortcuts — global keyboard shortcuts for the player.
- * Only active when not focused on input/textarea elements.
- */
-
 import { useEffect } from 'react';
-import { usePlayerStore } from '../stores/playerStore';
+import { usePlayerStore } from '@/state/player';
+import { useUIStore } from '@/state/ui';
 
-export function useKeyboardShortcuts() {
+function isTyping(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+}
+
+/** Global player keyboard shortcuts (BitChord-style). */
+export function useKeyboardShortcuts(): void {
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      // Skip if typing in an input
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) {
-        return;
-      }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTyping(event.target)) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
 
-      const store = usePlayerStore.getState();
+      const player = usePlayerStore.getState();
+      const ui = useUIStore.getState();
 
-      switch (e.key) {
+      switch (event.key) {
         case ' ':
-          e.preventDefault();
-          if (store.state === 'playing') store.pause();
-          else if (store.state === 'paused') store.resume();
+        case 'k':
+          event.preventDefault();
+          player.togglePlay();
           break;
-
         case 'ArrowRight':
-          e.preventDefault();
-          store.seek(Math.min(store.progress + 5, store.duration));
+          event.preventDefault();
+          if (event.shiftKey) player.next();
+          else player.seek(Math.min(player.progress + 5, player.duration || Infinity));
           break;
-
         case 'ArrowLeft':
-          e.preventDefault();
-          store.seek(Math.max(store.progress - 5, 0));
+          event.preventDefault();
+          if (event.shiftKey) player.previous();
+          else player.seek(Math.max(0, player.progress - 5));
           break;
-
         case 'ArrowUp':
-          e.preventDefault();
-          store.setVolume(Math.min(store.volume + 0.05, 1));
+          event.preventDefault();
+          player.setVolume(player.volume + 0.05);
           break;
-
         case 'ArrowDown':
-          e.preventDefault();
-          store.setVolume(Math.max(store.volume - 0.05, 0));
+          event.preventDefault();
+          player.setVolume(player.volume - 0.05);
           break;
-
         case 'm':
-        case 'M':
-          store.toggleMute();
+          player.toggleMute();
           break;
-
         case 's':
-        case 'S':
-          store.toggleShuffle();
+          player.toggleShuffle();
           break;
-
         case 'r':
-        case 'R':
-          store.cycleRepeat();
+          player.cycleRepeat();
           break;
-
-        case 'n':
-        case 'N':
-          store.next();
+        case 'q':
+          ui.togglePanel('queue');
           break;
-
-        case 'p':
-        case 'P':
-          store.previous();
+        case 'l':
+          ui.togglePanel('lyrics');
+          break;
+        case 'f':
+          ui.toggleFullScreen();
+          break;
+        case 'Escape':
+          if (ui.fullScreenOpen) ui.closeFullScreen();
+          else if (ui.panel) ui.closePanel();
+          break;
+        default:
           break;
       }
     };
 
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 }

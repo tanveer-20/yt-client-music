@@ -14,6 +14,7 @@ import cors from 'cors';
 import searchRouter from './routes/search.js';
 import streamRouter from './routes/stream.js';
 import infoRouter from './routes/info.js';
+import catalogRouter from './routes/catalog.js';
 import { checkYtDlp } from './services/youtube.js';
 
 const app = express();
@@ -51,6 +52,7 @@ app.get('/api/health', (_req, res) => {
 // API routes
 app.use('/api/search', searchRouter);
 app.use('/api/stream', streamRouter);
+app.use('/api', catalogRouter);
 app.use('/api', infoRouter);  // handles /api/info/:id and /api/suggestions/:id
 
 // ─── Error Handling ──────────────────────────────────────────
@@ -122,7 +124,12 @@ async function start() {
     console.log('');
     console.log('  Endpoints:');
     console.log(`    GET /api/health`);
-    console.log(`    GET /api/search?q=<query>&limit=<n>`);
+    console.log(`    GET /api/home`);
+    console.log(`    GET /api/search?q=<query>`);
+    console.log(`    GET /api/album/<id>`);
+    console.log(`    GET /api/artist/<id>`);
+    console.log(`    GET /api/playlist/<id>`);
+    console.log(`    GET /api/lyrics?videoId=<id>&title=<t>&artist=<a>`);
     console.log(`    GET /api/stream/<videoId>`);
     console.log(`    GET /api/info/<videoId>`);
     console.log(`    GET /api/suggestions/<videoId>`);

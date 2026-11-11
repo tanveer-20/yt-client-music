@@ -1,44 +1,68 @@
 /**
- * Search route — GET /api/search?q=:query&limit=:limit
+ * Search route — GET /api/search?q=:query
+ *
+ * Returns the full search surface (songs, albums, artists, playlists,
+ * videos) from YouTube Music. The legacy yt-dlp/InnerTube track search
+ * remains as a fallback when the music catalogue call fails.
  */
 
 import { Router, type Request, type Response } from 'express';
+import { searchMusic, type SearchResults } from '../services/catalog.js';
 import { searchTracks } from '../services/youtube.js';
 import { searchCache } from '../utils/cache.js';
 
 const router = Router();
 
 router.get('/', async (req: Request, res: Response): Promise<void> => {
+  const query = String(req.query.q || '').trim();
+  if (!query) {
+    res.status(400).json({ error: 'Missing search query parameter "q"' });
+    return;
+  }
+
+  const cacheKey = `v2:${query.toLowerCase()}`;
+  const cached = searchCache.get(cacheKey) as SearchResults | undefined;
+  if (cached) {
+    res.json(cached);
+    return;
+  }
+
   try {
-    const query = (req.query.q as string)?.trim();
-    if (!query) {
-      res.status(400).json({ error: 'Missing search query parameter "q"' });
-      return;
-    }
+    const results = await searchMusic(query);
+    searchCache.set(cacheKey, results, 5 * 60 * 1000);
+    res.json(results);
+    return;
+  } catch (error) {
+    console.warn('Music search failed, falling back to track search:', error);
+  }
 
-    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 30);
-    const cacheKey = `${query}:${limit}`;
-
-    // Check cache
-    const cached = searchCache.get(cacheKey);
-    if (cached) {
-      console.log(`  ↳ Cache hit for search: "${query}"`);
-      res.json(cached);
-      return;
-    }
-
-    console.log(`  ↳ Searching YouTube for: "${query}" (limit: ${limit})`);
-    const results = await searchTracks(query, limit);
-
-    const response = { results, query };
-    searchCache.set(cacheKey, response);
-
-    res.json(response);
-  } catch (err) {
-    console.error('Search error:', err);
+  try {
+    const tracks = await searchTracks(query, 20);
+    const fallback: SearchResults = {
+      query,
+      top: tracks[0]
+        ? {
+            id: tracks[0].id,
+            kind: 'track',
+            title: tracks[0].title,
+            subtitle: tracks[0].artist,
+            artwork: tracks[0].thumbnail,
+            duration: tracks[0].duration,
+          }
+        : undefined,
+      songs: tracks,
+      albums: [],
+      artists: [],
+      playlists: [],
+      videos: [],
+    };
+    searchCache.set(cacheKey, fallback, 2 * 60 * 1000);
+    res.json(fallback);
+  } catch (error) {
+    console.error('Search error:', error);
     res.status(500).json({
       error: 'Search failed',
-      message: err instanceof Error ? err.message : 'Unknown error',
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
