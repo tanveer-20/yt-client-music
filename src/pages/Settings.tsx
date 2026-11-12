@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Keyboard, Play, Server, SlidersHorizontal, XCircle } from 'lucide-react';
 import { useSettingsStore, type Quality } from '@/state/settings';
+import { useAutomixStore } from '@/playback/automix';
 import { checkHealth } from '@/data/music/api';
 import { NerdStats } from '@/shell/NerdStats';
 import { usePlayerStore } from '@/state/player';
@@ -78,6 +79,7 @@ const SHORTCUTS: Array<[string, string]> = [
 
 export default function SettingsPage() {
   const settings = useSettingsStore();
+  const automix = useAutomixStore();
   const playbackRate = usePlayerStore((s) => s.playbackRate);
   const setPlaybackRate = usePlayerStore((s) => s.setPlaybackRate);
   const [serverUrl, setServerUrl] = useState(settings.serverUrl);
@@ -129,6 +131,36 @@ export default function SettingsPage() {
               Overlap the end of one track with the start of the next. 0 disables crossfade.
             </p>
           </div>
+
+          <Toggle
+            label="Automix"
+            description="Analyse each track and adapt the transition — calm songs blend longer, high-energy songs cut."
+            checked={automix.enabled}
+            onChange={automix.setEnabled}
+          />
+
+          {automix.enabled && (
+            <div>
+              <div className="flex justify-between t-body-em">
+                <span>Automix length</span>
+                <span className="t-secondary tabular">{automix.transitionSec}s</span>
+              </div>
+              <input
+                type="range"
+                className="slider mt-2"
+                min={1}
+                max={12}
+                step={1}
+                value={automix.transitionSec}
+                aria-label="Automix transition length"
+                style={{ ['--fill' as string]: `${(automix.transitionSec / 12) * 100}%` }}
+                onChange={(event) => automix.setTransitionSec(Number(event.target.value))}
+              />
+              <p className="t-footnote t-secondary mt-1">
+                Base overlap while Rem analyses the audio; the plan adjusts per track.
+              </p>
+            </div>
+          )}
 
           <Toggle
             label="Autoplay similar songs"

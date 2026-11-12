@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Clock3, Heart, Home, Library, Search, Settings } from 'lucide-react';
+import { Clock3, Heart, Home, Library, Package, Puzzle, Radio, Search, Settings, UserRound } from 'lucide-react';
 import { useLibraryStore } from '@/state/library';
 import { SearchField } from '@/components/music/SearchField';
 import { usePlayerStore } from '@/state/player';
@@ -57,6 +57,34 @@ export function Sidebar() {
         <NavLink to="/library" end className="nav-item">
           <Library size={17} className="nav-icon" />
           All Library
+        </NavLink>
+        <NavLink to="/account" className="nav-item">
+          <UserRound size={17} className="nav-icon" />
+          Account
+        </NavLink>
+        <NavLink to="/replay" className="nav-item">
+          <Clock3 size={17} className="nav-icon" />
+          Replay
+        </NavLink>
+      </nav>
+
+      <nav className="nav-group" aria-label="Connect">
+        <div className="nav-label">Connect</div>
+        <NavLink to="/integrations" className="nav-item">
+          <Puzzle size={17} className="nav-icon" />
+          Integrations
+        </NavLink>
+        <NavLink to="/listen-together" className="nav-item">
+          <Radio size={17} className="nav-icon" />
+          Listen Together
+        </NavLink>
+        <NavLink to="/addons" className="nav-item">
+          <Package size={17} className="nav-icon" />
+          Addons
+        </NavLink>
+        <NavLink to="/extension" className="nav-item">
+          <Puzzle size={17} className="nav-icon" />
+          Extension
         </NavLink>
       </nav>
 

@@ -5,6 +5,7 @@ import { usePlayerStore } from '@/state/player';
 import { useSettingsStore } from '@/state/settings';
 import { fetchSuggestions } from '@/data/music/api';
 import { createMediaMetadata } from './mediaSession';
+import { useAutomixStore, analyzeAudioUrl, planAutomixTransition, type AudioAnalysis } from './automix';
 
 type DeckId = 'a' | 'b';
 
@@ -40,6 +41,8 @@ export class PlaybackEngine {
   private autoplayPending = false;
   private cleanups: Array<() => void> = [];
   private initialized = false;
+  private analyses = new Map<string, AudioAnalysis>();
+  private analysisInFlight = new Map<string, Promise<void>>();
 
   init(): void {
     if (this.initialized) return;
@@ -185,6 +188,12 @@ export class PlaybackEngine {
     const token = ++this.loadToken;
     const store = usePlayerStore.getState();
 
+    // Automix pre-analyses the current and next track so a transition plan is
+    // ready before the crossfade window opens.
+    this.scheduleAnalysis(track);
+    const queuedNext = store.queue[store.queueIndex + 1];
+    if (queuedNext) this.scheduleAnalysis(queuedNext);
+
     el.pause();
     el.src = this.resolveStream(track);
     el.load();
@@ -252,10 +261,26 @@ export class PlaybackEngine {
 
   // ── Crossfade ────────────────────────────────────────────
 
+  /** Fire-and-forget audio analysis used by Automix to plan transitions. */
+  private scheduleAnalysis(track: Track): void {
+    if (!useAutomixStore.getState().enabled) return;
+    if (this.analyses.has(track.id) || this.analysisInFlight.has(track.id)) return;
+    const pending = analyzeAudioUrl(this.resolveStream(track))
+      .then((analysis) => {
+        this.analyses.set(track.id, analysis);
+      })
+      .catch(() => {
+        /* analysis is best-effort; planning falls back to defaults */
+      })
+      .finally(() => {
+        this.analysisInFlight.delete(track.id);
+      });
+    this.analysisInFlight.set(track.id, pending);
+  }
+
   private maybeStartCrossfade(): void {
     if (this.crossfade) return;
     const settings = useSettingsStore.getState();
-    if (settings.crossfadeSec <= 0) return;
 
     const state = usePlayerStore.getState();
     if (state.state !== 'playing' || !state.queue.length) return;
@@ -268,12 +293,27 @@ export class PlaybackEngine {
     }
     if (nextIndex === state.queueIndex) return;
 
+    const nextTrack = state.queue[nextIndex];
+
+    // Automix plans each transition from the analysed audio; without it the
+    // fixed crossfade slider decides the overlap.
+    let sec = settings.crossfadeSec;
+    if (useAutomixStore.getState().enabled) {
+      const plan = planAutomixTransition(
+        state.currentTrack ? this.analyses.get(state.currentTrack.id) : undefined,
+        this.analyses.get(nextTrack.id),
+        useAutomixStore.getState().transitionSec
+      );
+      if (plan.type === 'cut') return;
+      sec = Math.max(1, plan.durationSec);
+    }
+    if (sec <= 0) return;
+
     const el = this.deck(this.active);
     if (!Number.isFinite(el.duration) || el.duration <= 0) return;
     const remaining = el.duration - el.currentTime;
-    if (remaining > settings.crossfadeSec) return;
+    if (remaining > sec) return;
 
-    const nextTrack = state.queue[nextIndex];
     const from = this.active;
     const to = this.otherDeck(from);
     const idle = this.deck(to);
@@ -285,7 +325,7 @@ export class PlaybackEngine {
     idle.playbackRate = state.playbackRate;
     this.setLevel(to, 0);
 
-    const durationMs = Math.max(CROSSFADE_MIN_MS, settings.crossfadeSec * 1000);
+    const durationMs = Math.max(CROSSFADE_MIN_MS, sec * 1000);
     this.crossfade = {
       from,
       to,

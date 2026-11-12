@@ -15,6 +15,13 @@ import searchRouter from './routes/search.js';
 import streamRouter from './routes/stream.js';
 import infoRouter from './routes/info.js';
 import catalogRouter from './routes/catalog.js';
+import spotifyRouter from './routes/spotify.js';
+import discordRouter from './routes/discord.js';
+import addonsRouter from './routes/addons.js';
+import partyRouter from './routes/party.js';
+import directRouter from './routes/direct.js';
+import accountsRouter from './routes/accounts.js';
+import { attachPartyServer } from './services/party.js';
 import { checkYtDlp } from './services/youtube.js';
 
 const app = express();
@@ -52,6 +59,12 @@ app.get('/api/health', (_req, res) => {
 // API routes
 app.use('/api/search', searchRouter);
 app.use('/api/stream', streamRouter);
+app.use('/api/spotify', spotifyRouter);
+app.use('/api/discord', discordRouter);
+app.use('/api/addons', addonsRouter);
+app.use('/api/party', partyRouter);
+app.use('/api/direct', directRouter);
+app.use('/api/accounts', accountsRouter);
 app.use('/api', catalogRouter);
 app.use('/api', infoRouter);  // handles /api/info/:id and /api/suggestions/:id
 
@@ -106,7 +119,7 @@ async function start() {
     console.error('');
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     const localIps = getLocalIpAddresses();
     console.log('');
     console.log('╔══════════════════════════════════════════════════════════╗');
@@ -133,8 +146,15 @@ async function start() {
     console.log(`    GET /api/stream/<videoId>`);
     console.log(`    GET /api/info/<videoId>`);
     console.log(`    GET /api/suggestions/<videoId>`);
+    console.log(`    /api/spotify/*`);
+    console.log(`    /api/discord/*`);
+    console.log(`    /api/addons/*`);
+    console.log(`    /api/party/* + ws`);
+    console.log(`    /api/direct/:videoId`);
+    console.log(`    /api/accounts/*`);
     console.log('');
   });
+  attachPartyServer(server);
 }
 
 start();

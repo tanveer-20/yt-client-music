@@ -82,8 +82,12 @@ function normalizeStartedAt(value: number | undefined): number | undefined {
 }
 
 function rawToString(data: RawData): string {
-  if (Array.isArray(data)) return Buffer.concat(data).toString('utf8');
-  return Buffer.from(data).toString('utf8');
+  if (typeof data === 'string') return data;
+  if (Array.isArray(data)) {
+    return Buffer.concat(data.map((part) => Buffer.from(part as unknown as Uint8Array)))
+      .toString('utf8');
+  }
+  return Buffer.from(data as unknown as Uint8Array).toString('utf8');
 }
 
 export function getStatus(): DiscordStatus {

@@ -33,6 +33,38 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('@/pages/Library')).default }),
       },
       {
+        path: 'account',
+        lazy: async () => ({ Component: (await import('@/pages/Account')).default }),
+      },
+      {
+        path: 'replay',
+        lazy: async () => ({ Component: (await import('@/pages/Replay')).default }),
+      },
+      {
+        path: 'listen-together',
+        lazy: async () => ({ Component: (await import('@/pages/ListenTogether')).default }),
+      },
+      {
+        path: 'integrations',
+        lazy: async () => ({ Component: (await import('@/pages/Integrations')).default }),
+      },
+      {
+        path: 'spotify',
+        lazy: async () => ({ Component: (await import('@/pages/Spotify')).default }),
+      },
+      {
+        path: 'discord',
+        lazy: async () => ({ Component: (await import('@/pages/Discord')).default }),
+      },
+      {
+        path: 'addons',
+        lazy: async () => ({ Component: (await import('@/pages/Addons')).default }),
+      },
+      {
+        path: 'extension',
+        lazy: async () => ({ Component: (await import('@/pages/Extension')).default }),
+      },
+      {
         path: 'settings',
         lazy: async () => ({ Component: (await import('@/pages/Settings')).default }),
       },
