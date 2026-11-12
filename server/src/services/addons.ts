@@ -12,6 +12,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 
 export interface AddonManifest {
@@ -107,7 +108,8 @@ export function validateBaseUrl(raw: string): string {
   if (!url || (url.protocol !== 'http:' && url.protocol !== 'https:')) {
     throw new AddonError(400, 'Addon URL must start with http:// or https://.');
   }
-  if (!url.hostname.includes('.')) {
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (!(host === 'localhost' || host.endsWith('.localhost') || host.includes('.') || isIP(host) !== 0)) {
     throw new AddonError(400, 'Addon URL is missing a valid host.');
   }
   if (url.username || url.password) {
@@ -320,13 +322,17 @@ export function findAddon(id: string): StoredAddon {
 
 export async function resolveAddonStream(
   addon: StoredAddon,
-  trackId: string
+  trackId: string,
+  range?: string | null
 ): Promise<Response> {
   const streamPath = addon.manifest?.api?.stream || '/stream';
   const url = `${addon.base}${streamPath.startsWith('/') ? streamPath : `/${streamPath}`}/${encodeURIComponent(trackId)}`;
   try {
     return await fetch(url, {
-      headers: { Accept: '*/*' },
+      headers: {
+        Accept: '*/*',
+        ...(range ? { Range: range } : {}),
+      },
       signal: AbortSignal.timeout(STREAM_TIMEOUT_MS),
     });
   } catch {

@@ -100,7 +100,7 @@ router.get('/stream/:addonId/:trackId', async (req: Request, res: Response): Pro
   try {
     const addon = findAddon(String(req.params.addonId));
     const trackId = String(req.params.trackId);
-    const upstream = await resolveAddonStream(addon, trackId);
+    const upstream = await resolveAddonStream(addon, trackId, req.headers.range);
 
     res.status(upstream.status);
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'audio/mpeg');
