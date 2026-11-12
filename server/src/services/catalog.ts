@@ -141,10 +141,13 @@ function bestThumb(thumbs: unknown): string {
 
 function thumbList(node: {
   thumbnails?: unknown;
-  thumbnail?: { contents?: unknown } | null;
+  /** Raw Innertube shape is `{ contents: [...] }`; parsed MusicTwoRowItem is `Thumbnail[]`. */
+  thumbnail?: { contents?: unknown } | unknown[] | null;
   contents?: unknown;
 }): string {
-  return bestThumb(node.thumbnails ?? node.thumbnail?.contents ?? node.contents);
+  const thumb = node.thumbnail;
+  const source = node.thumbnails ?? (Array.isArray(thumb) ? thumb : thumb?.contents) ?? node.contents;
+  return bestThumb(source);
 }
 
 function cleanArtist(name: string): string {
