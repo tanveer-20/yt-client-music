@@ -21,3 +21,6 @@ android/.idea/
 .codex/
 .vercel
 *.apk
+
+# runtime data
+server/data/
