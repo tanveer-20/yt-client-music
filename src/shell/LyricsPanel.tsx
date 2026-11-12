@@ -4,10 +4,14 @@ import { usePlayerStore } from '@/state/player';
 import { useUIStore } from '@/state/ui';
 import { useLyrics } from '@/lyrics/useLyrics';
 import { EmptyState, LoadingState } from '@/components/common/States';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 export function LyricsPanel() {
   const panel = useUIStore((s) => s.panel);
   const closePanel = useUIStore((s) => s.closePanel);
+  const panelRef = useRef<HTMLElement>(null);
+  useFocusTrap(panel === 'lyrics', panelRef);
+
   const track = usePlayerStore((s) => s.currentTrack);
   const progress = usePlayerStore((s) => s.progress);
   const seek = usePlayerStore((s) => s.seek);
@@ -34,7 +38,7 @@ export function LyricsPanel() {
   if (panel !== 'lyrics') return null;
 
   return (
-    <aside className="side-panel" role="dialog" aria-modal="true" aria-label="Lyrics">
+    <aside ref={panelRef} className="side-panel" role="dialog" aria-modal="true" aria-label="Lyrics">
       <div className="panel-head">
         <div>
           <div className="panel-title">Lyrics</div>
@@ -42,7 +46,7 @@ export function LyricsPanel() {
             {track ? `${track.title} — ${track.artist}` : 'Nothing playing'}
           </div>
         </div>
-        <button type="button" className="icon-btn" onClick={closePanel} aria-label="Close lyrics">
+        <button type="button" className="icon-btn" onClick={closePanel} aria-label="Close lyrics" data-autofocus>
           <X size={18} />
         </button>
       </div>

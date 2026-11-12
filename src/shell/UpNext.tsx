@@ -1,12 +1,17 @@
+import { useRef } from 'react';
 import { ArrowDown, ArrowUp, ListMusic, Play, Trash2, X } from 'lucide-react';
 import { usePlayerStore } from '@/state/player';
 import { useUIStore } from '@/state/ui';
 import { Artwork } from '@/components/common/Artwork';
 import { formatTime } from '@/lib/format';
 import { EmptyState } from '@/components/common/States';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 export function UpNext() {
   const panel = useUIStore((s) => s.panel);
+  const panelRef = useRef<HTMLElement>(null);
+  useFocusTrap(panel === 'queue', panelRef);
+
   const closePanel = useUIStore((s) => s.closePanel);
   const queue = usePlayerStore((s) => s.queue);
   const queueIndex = usePlayerStore((s) => s.queueIndex);
@@ -19,7 +24,7 @@ export function UpNext() {
   if (panel !== 'queue') return null;
 
   return (
-    <aside className="side-panel" role="dialog" aria-modal="true" aria-label="Up next">
+    <aside ref={panelRef} className="side-panel" role="dialog" aria-modal="true" aria-label="Up next">
       <div className="panel-head">
         <div>
           <div className="panel-title">Up Next</div>
@@ -33,7 +38,7 @@ export function UpNext() {
               <Trash2 size={16} />
             </button>
           )}
-          <button type="button" className="icon-btn" onClick={closePanel} aria-label="Close up next">
+          <button type="button" className="icon-btn" onClick={closePanel} aria-label="Close up next" data-autofocus>
             <X size={18} />
           </button>
         </div>

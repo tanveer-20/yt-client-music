@@ -1,9 +1,11 @@
+import { useRef } from 'react';
 import { ChevronDown, Heart, ListMusic, Loader2, Mic2, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePlayerStore } from '@/state/player';
 import { useLibraryStore } from '@/state/library';
 import { useUIStore } from '@/state/ui';
 import { useScrubber } from '@/hooks/useScrubber';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useArtworkTint } from '@/lib/tint';
 import { formatTime } from '@/lib/format';
 import { Artwork } from '@/components/common/Artwork';
@@ -13,6 +15,8 @@ export function FullScreenPlayer() {
   const open = useUIStore((s) => s.fullScreenOpen);
   const close = useUIStore((s) => s.closeFullScreen);
   const setPanel = useUIStore((s) => s.setPanel);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(open, rootRef);
 
   const track = usePlayerStore((s) => s.currentTrack);
   const state = usePlayerStore((s) => s.state);
@@ -43,6 +47,7 @@ export function FullScreenPlayer() {
 
   return (
     <div
+      ref={rootRef}
       className="fullscreen"
       data-full-screen
       role="dialog"
@@ -51,7 +56,7 @@ export function FullScreenPlayer() {
       style={{ ['--mesh-background' as string]: gradient }}
     >
       <div className="fullscreen-top">
-        <button type="button" className="icon-btn" onClick={close} aria-label="Close player" style={{ color: 'inherit' }}>
+        <button type="button" className="icon-btn" onClick={close} aria-label="Close player" style={{ color: 'inherit' }} data-autofocus>
           <ChevronDown size={22} />
         </button>
         <div className="t-caption uppercase tracking-[0.14em] opacity-60">Now playing</div>
