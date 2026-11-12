@@ -1,0 +1,17 @@
+# Keep the build context small and prevent local artifacts leaking into the image.
+.git
+.gitignore
+node_modules
+server/node_modules
+dist
+server/dist
+server/data
+server/*.log
+.vercel
+*.log
+.env
+.env.*
+.DS_Store
+Thumbs.db
+extension
+docs

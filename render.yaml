@@ -1,0 +1,14 @@
+# Render Blueprint — one-click deploy of the Rem API server.
+# Render reads this file when you create a new "Blueprint" instance
+# from this repository (New + → Blueprint → pick this repo → Apply).
+#
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: rem-server
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: ./
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
