@@ -16,7 +16,7 @@ export function getApiBase(): string {
   }
 
   if (Capacitor.isNativePlatform()) {
-    return 'https://rem-mocha.vercel.app/api';
+    return 'https://rem-server-nwib.onrender.com/api';
   }
 
   return '/api';

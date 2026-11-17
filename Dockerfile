@@ -17,6 +17,12 @@ RUN apt-get update \
   && chmod +x /usr/local/bin/yt-dlp \
   && yt-dlp --version
 
+# YouTube requires solving JS challenges (EJS). The standalone binary bundles
+# the solver scripts, but needs a JS runtime enabled — Node 22 is in this image,
+# and deno is the only runtime yt-dlp enables by default. Without this, every
+# extraction fails with "Failed to extract any player response".
+RUN printf -- '--js-runtimes node\n' > /etc/yt-dlp.conf
+
 # The server declares "yt-client": "file:.." — keep the repo layout so npm resolves it.
 WORKDIR /app
 COPY package.json /app/package.json
