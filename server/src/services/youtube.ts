@@ -78,16 +78,19 @@ async function runYtDlp(args: string[]): Promise<string> {
   const allArgs = [...prefixArgs, ...args];
   try {
     const { stdout } = await execFileAsync(binary, allArgs, {
-      timeout: 30_000,
+      timeout: 120_000,
       maxBuffer: 10 * 1024 * 1024, // 10 MB
     });
     return stdout.trim();
   } catch (err: unknown) {
-    const error = err as { stderr?: string; message?: string; code?: string };
+    const error = err as { stderr?: string; message?: string; code?: string; killed?: boolean };
     if (error.code === 'ENOENT') {
       throw new Error(
         'yt-dlp is not installed or not in PATH / .venv. Install it: pip install yt-dlp'
       );
+    }
+    if (error.killed) {
+      throw new Error('yt-dlp timed out after 120s (slow CPU or YouTube challenge stall)');
     }
     const message = error.stderr || error.message || 'yt-dlp failed';
     throw new Error(`yt-dlp error: ${message}`);
