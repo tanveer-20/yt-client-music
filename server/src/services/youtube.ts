@@ -4,6 +4,7 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import Innertube from 'youtubei.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -403,11 +404,76 @@ export interface StreamResult {
   headers?: Record<string, string>;
 }
 
+// ─── InnerTube stream resolver ───────────────────────────────
+// Preferred path: uses the same InnerTube API as the catalog (which works on
+// datacenter IPs), with in-process JS deciphering. yt-dlp is the fallback for
+// networks where InnerTube player requests are refused.
+
+let streamClientPromise: Promise<Innertube> | null = null;
+
+function getStreamClient(): Promise<Innertube> {
+  if (!streamClientPromise) {
+    streamClientPromise = Innertube.create({
+      lang: 'en',
+      location: 'US',
+      retrieve_player: true,
+    }).catch((error) => {
+      streamClientPromise = null;
+      throw error;
+    });
+  }
+  return streamClientPromise;
+}
+
+async function getStreamUrlViaInnertube(videoId: string): Promise<StreamResult> {
+  const yt = await getStreamClient();
+  const format = await yt.getStreamingData(videoId, {
+    type: 'audio',
+    quality: 'best',
+    format: 'any',
+  });
+
+  if (!format.url) {
+    throw new Error('InnerTube returned no deciphered stream URL');
+  }
+
+  const mime = format.mime_type || 'audio/webm; codecs="opus"';
+  const formatName = mime.includes('mp4') ? 'm4a' : mime.includes('webm') ? 'webm' : 'audio';
+
+  return {
+    url: format.url,
+    format: formatName,
+    contentType: mime,
+    loudnessDb: typeof format.loudness_db === 'number' ? format.loudness_db : undefined,
+    headers: {},
+  };
+}
+
 /**
- * Get the direct audio stream URL for a video in a single fast yt-dlp call.
- * Prioritizes 48kHz Opus (itag 251) for bit-perfect hardware DAC decoding.
+ * Get the direct audio stream URL for a video.
+ * Tries InnerTube first (fast, cloud-friendly), then yt-dlp (local/self-hosted).
+ * yt-dlp prioritizes 48kHz Opus (itag 251) for bit-perfect hardware DAC decoding.
  */
 export async function getStreamUrl(videoId: string): Promise<StreamResult> {
+  try {
+    return await getStreamUrlViaInnertube(videoId);
+  } catch (innerTubeError) {
+    const firstMessage =
+      innerTubeError instanceof Error ? innerTubeError.message : String(innerTubeError);
+
+    try {
+      return await getStreamUrlViaYtDlp(videoId);
+    } catch (ytdlpError) {
+      const secondMessage =
+        ytdlpError instanceof Error ? ytdlpError.message : String(ytdlpError);
+      throw new Error(
+        `Stream resolution failed (InnerTube: ${firstMessage}; yt-dlp: ${secondMessage})`
+      );
+    }
+  }
+}
+
+async function getStreamUrlViaYtDlp(videoId: string): Promise<StreamResult> {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const formatSelector = '251/140/bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best';
 
