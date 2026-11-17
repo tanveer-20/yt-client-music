@@ -4,7 +4,7 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import Innertube from 'youtubei.js';
+import Innertube, { type Types } from 'youtubei.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -425,28 +425,62 @@ function getStreamClient(): Promise<Innertube> {
   return streamClientPromise;
 }
 
+// YouTube bot-checks the /player endpoint per client and per IP. Datacenter IPs
+// (Render/Railway/etc.) get 403 from the default WEB client, but other clients
+// are often still allowed — try them in order until one returns a playable URL.
+const STREAM_CLIENTS: Array<Types.InnerTubeClient> = [
+  'YTMUSIC_ANDROID',
+  'ANDROID_VR',
+  'TV_SIMPLY',
+  'IOS',
+  'WEB_EMBEDDED',
+  'MWEB',
+  'ANDROID',
+  'TV',
+  'YTMUSIC',
+];
+
 async function getStreamUrlViaInnertube(videoId: string): Promise<StreamResult> {
   const yt = await getStreamClient();
-  const format = await yt.getStreamingData(videoId, {
-    type: 'audio',
-    quality: 'best',
-    format: 'any',
-  });
+  let lastError: unknown = null;
 
-  if (!format.url) {
-    throw new Error('InnerTube returned no deciphered stream URL');
+  for (const client of STREAM_CLIENTS) {
+    try {
+      const format = await yt.getStreamingData(videoId, {
+        client,
+        type: 'audio',
+        quality: 'best',
+        format: 'any',
+      });
+
+      if (!format.url) {
+        throw new Error(`no deciphered URL (itag ${format.itag})`);
+      }
+
+      const mime = format.mime_type || 'audio/webm; codecs="opus"';
+      const formatName = mime.includes('mp4') ? 'm4a' : mime.includes('webm') ? 'webm' : 'audio';
+
+      console.log(
+        `[stream] ${videoId} resolved via InnerTube client ${client} (itag ${format.itag})`
+      );
+
+      return {
+        url: format.url,
+        format: formatName,
+        contentType: mime,
+        loudnessDb: typeof format.loudness_db === 'number' ? format.loudness_db : undefined,
+        headers: {},
+      };
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[stream] ${videoId} InnerTube client ${client} failed: ${message}`);
+    }
   }
 
-  const mime = format.mime_type || 'audio/webm; codecs="opus"';
-  const formatName = mime.includes('mp4') ? 'm4a' : mime.includes('webm') ? 'webm' : 'audio';
-
-  return {
-    url: format.url,
-    format: formatName,
-    contentType: mime,
-    loudnessDb: typeof format.loudness_db === 'number' ? format.loudness_db : undefined,
-    headers: {},
-  };
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('All InnerTube clients failed to resolve the stream');
 }
 
 /**
