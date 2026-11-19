@@ -429,6 +429,9 @@ function getStreamClient(): Promise<Innertube> {
 // (Render/Railway/etc.) get 403 from the default WEB client, but other clients
 // are often still allowed — try them in order until one returns a playable URL.
 const STREAM_CLIENTS: Array<Types.InnerTubeClient> = [
+  // VISIONOS returns plain deciphered URLs (no PO token client), and is the
+  // client BitChord plays through in the browser. Try it first.
+  'VISIONOS',
   'YTMUSIC_ANDROID',
   'ANDROID_VR',
   'TV_SIMPLY',
