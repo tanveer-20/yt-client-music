@@ -449,14 +449,29 @@ async function getStreamUrlViaInnertube(videoId: string): Promise<StreamResult> 
 
   for (const client of STREAM_CLIENTS) {
     try {
-      const format = await yt.getStreamingData(videoId, {
-        client,
-        type: 'audio',
-        quality: 'best',
-        format: 'any',
-      });
+      const started = Date.now();
+      const info = await yt.getInfo(videoId, { client });
+      const audio = (info.streaming_data?.adaptive_formats ?? []).filter(
+        (format) => format.has_audio && !format.has_video
+      );
 
-      if (!format.url) {
+      // Prefer Opus 251, then AAC 140, then the next-best audio-only format.
+      // Choosing manually avoids `chooseFormat`'s muxed fallback (itag 18),
+      // which would proxy a whole video file for an audio track.
+      let format = [251, 140, 250, 249]
+        .map((itag) => audio.find((candidate) => candidate.itag === itag))
+        .find((candidate) => candidate !== undefined);
+
+      if (!format) {
+        format = audio.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+      }
+
+      if (!format) {
+        throw new Error('no audio-only format in the player response');
+      }
+
+      const url = await format.decipher(yt.session.player);
+      if (!url) {
         throw new Error(`no deciphered URL (itag ${format.itag})`);
       }
 
@@ -464,11 +479,11 @@ async function getStreamUrlViaInnertube(videoId: string): Promise<StreamResult> 
       const formatName = mime.includes('mp4') ? 'm4a' : mime.includes('webm') ? 'webm' : 'audio';
 
       console.log(
-        `[stream] ${videoId} resolved via InnerTube client ${client} (itag ${format.itag})`
+        `[stream] ${videoId} resolved via InnerTube client ${client} (itag ${format.itag}, ${Date.now() - started}ms)`
       );
 
       return {
-        url: format.url,
+        url,
         format: formatName,
         contentType: mime,
         loudnessDb: typeof format.loudness_db === 'number' ? format.loudness_db : undefined,
