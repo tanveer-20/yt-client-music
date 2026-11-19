@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Rem Companion",
-  "version": "0.1.0",
-  "description": "Connects the Rem web player to YouTube for direct audio, header rewriting and future account features.",
+  "version": "0.2.0",
+  "description": "Plays Rem audio directly from YouTube in your browser, with header rewriting and future account features.",
   "permissions": [
     "declarativeNetRequest",
     "declarativeNetRequestWithHostAccess",

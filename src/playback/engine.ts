@@ -5,6 +5,14 @@ import { usePlayerStore } from '@/state/player';
 import { useSettingsStore } from '@/state/settings';
 import { fetchSuggestions } from '@/data/music/api';
 import { createMediaMetadata } from './mediaSession';
+import {
+  cachedDirectUrl,
+  directPlaybackAvailable,
+  invalidateDirectUrl,
+  prefetchDirectUrl,
+  probeDirectPlayback,
+  resolvePlaybackUrl,
+} from './source';
 import { useAutomixStore, analyzeAudioUrl, planAutomixTransition, type AudioAnalysis } from './automix';
 
 type DeckId = 'a' | 'b';
@@ -47,6 +55,10 @@ export class PlaybackEngine {
   init(): void {
     if (this.initialized) return;
     this.initialized = true;
+
+    // Playback prefers the user's own IP (via the companion extension) over
+    // the proxy; probe once so the first tap can go direct.
+    void probeDirectPlayback();
 
     this.deckA = (document.getElementById('rem-deck-a') as HTMLAudioElement) || this.createDeck('rem-deck-a');
     this.deckB = (document.getElementById('rem-deck-b') as HTMLAudioElement) || this.createDeck('rem-deck-b');
@@ -95,7 +107,7 @@ export class PlaybackEngine {
   private bindStore(): void {
     const unsubscribe = usePlayerStore.subscribe((state, prev) => {
       if (state.playRequestId !== prev.playRequestId && state.currentTrack) {
-        this.load(state.currentTrack);
+        void this.load(state.currentTrack);
       }
 
       if (state.state !== prev.state) {
@@ -173,7 +185,7 @@ export class PlaybackEngine {
 
   // ── Load / transport ─────────────────────────────────────
 
-  private load(track: Track): void {
+  private async load(track: Track): Promise<void> {
     this.cancelCrossfade();
     const el = this.deck(this.active);
     const other = this.deck(this.otherDeck(this.active));
@@ -189,20 +201,37 @@ export class PlaybackEngine {
     const store = usePlayerStore.getState();
 
     // Automix pre-analyses the current and next track so a transition plan is
-    // ready before the crossfade window opens.
+    // ready before the crossfade window opens. The next track's stream URL is
+    // resolved now too, because the crossfade needs it without waiting.
     this.scheduleAnalysis(track);
     const queuedNext = store.queue[store.queueIndex + 1];
-    if (queuedNext) this.scheduleAnalysis(queuedNext);
+    if (queuedNext) {
+      this.scheduleAnalysis(queuedNext);
+      prefetchDirectUrl(queuedNext.id);
+    }
 
     el.pause();
-    el.src = this.resolveStream(track);
+    el.removeAttribute('src');
     el.load();
     el.playbackRate = store.playbackRate;
     this.setLevel(this.active, this.effectiveVolume());
+    usePlayerStore.getState().setState('loading');
+
+    // Browser-direct resolution is a network call; the proxy URL is instant.
+    const src = await resolvePlaybackUrl(track);
+    if (token !== this.loadToken) return;
+
+    el.src = src;
+    el.load();
+
+    // A pause during resolution must win over the pending autoplay.
+    const current = usePlayerStore.getState();
+    if (current.state !== 'playing' && current.state !== 'loading') return;
 
     el.play()
       .then(() => {
         if (token !== this.loadToken) return;
+        this.retries.delete(track.id);
         usePlayerStore.getState().setState('playing');
         usePlayerStore.getState().setProgress(0);
       })
@@ -221,7 +250,7 @@ export class PlaybackEngine {
 
     const el = this.deck(this.active);
     if (!el.src) {
-      this.load(track);
+      void this.load(track);
       return;
     }
     if (el.paused) {
@@ -265,7 +294,8 @@ export class PlaybackEngine {
   private scheduleAnalysis(track: Track): void {
     if (!useAutomixStore.getState().enabled) return;
     if (this.analyses.has(track.id) || this.analysisInFlight.has(track.id)) return;
-    const pending = analyzeAudioUrl(this.resolveStream(track))
+    const pending = resolvePlaybackUrl(track)
+      .then((url) => analyzeAudioUrl(url))
       .then((analysis) => {
         this.analyses.set(track.id, analysis);
       })
@@ -320,7 +350,16 @@ export class PlaybackEngine {
 
     this.ensureGraph();
     idle.pause();
-    idle.src = this.resolveStream(nextTrack);
+    const nextSrc = directPlaybackAvailable()
+      ? cachedDirectUrl(nextTrack.id)
+      : this.resolveStream(nextTrack);
+    if (!nextSrc) {
+      // The direct URL is still resolving; keep playing and try again on the
+      // next tick, or let onEnded load the track normally.
+      prefetchDirectUrl(nextTrack.id);
+      return;
+    }
+    idle.src = nextSrc;
     idle.load();
     idle.playbackRate = state.playbackRate;
     this.setLevel(to, 0);
@@ -448,12 +487,19 @@ export class PlaybackEngine {
     if (!track) return;
 
     const attempts = this.retries.get(track.id) || 0;
+    invalidateDirectUrl(track.id);
     if (attempts >= 2) {
       this.retries.delete(track.id);
       state.setState('paused');
       return;
     }
     this.retries.set(track.id, attempts + 1);
+    if (attempts === 0) {
+      // The URL may have expired or been minted for another address: resolve
+      // again and retry the same track once.
+      void this.load(track);
+      return;
+    }
     state.next(true);
   }
 

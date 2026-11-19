@@ -64,12 +64,14 @@ export default function ExtensionPage() {
           <h2 className="t-title-3" style={{ fontWeight: 700 }}>What it enables</h2>
         </div>
         <p className="t-callout t-secondary">
-          It rewrites Origin/Referer on YouTube requests, exposes CORS response headers for range
-          requests, and supports credentialed InnerTube metadata. It never proxies audio bytes.
+          It rewrites Origin/Referer on YouTube requests, exposes CORS response headers, and lets
+          Rem ask YouTube for audio from your own IP. Audio bytes go straight from Google to this
+          tab; nothing is proxied through your PC or the cloud server.
         </p>
         <p className="t-footnote mt-3" style={{ color: 'var(--systemOrange)' }}>
-          Direct SABR/PO-token playback is still a foundation. Rem falls back to its server proxy
-          automatically when the extension is not present.
+          Playback uses YouTube's VISIONOS client, which returns plain audio URLs and needs no PO
+          token. Rem falls back to its server proxy automatically when the extension is not
+          present.
         </p>
       </section>
     </div>

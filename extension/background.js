@@ -26,8 +26,11 @@ const FETCH_TIMEOUT_MS = 20_000;
 
 /** Dynamic rule ids owned by this extension. Keep stable across updates. */
 const RULE_IDS = {
-  requestHeaders: 7101,
-  responseHeaders: 7102,
+  innertubeWww: 7101,
+  innertubeMusic: 7102,
+  corsResponse: 7103,
+  googlevideoHeaders: 7104,
+  visionosNoOrigin: 7105,
 };
 
 /**
@@ -46,6 +49,12 @@ const FETCH_DOMAINS = [
  * FETCH_DOMAINS: we only need to touch InnerTube and media hosts.
  */
 const REWRITE_DOMAINS = ['youtube.com', 'youtubei.googleapis.com', 'googlevideo.com'];
+
+/**
+ * Pages whose requests may be rewritten. Scoping by initiator keeps YouTube's
+ * own tabs (and every other site) untouched.
+ */
+const SITE_INITIATORS = ['rem-mocha.vercel.app', 'localhost', '127.0.0.1'];
 
 /**
  * Headers that a browser fetch is not allowed to set (or that would leak
@@ -69,17 +78,76 @@ const FORBIDDEN_REQUEST_HEADERS = new Set([
 /**
  * DNR rules.
  *
- * Rule 1: add Origin/Referer to YouTube requests. This is what makes
- * googlevideo URLs behave as if they were requested by an embedded YouTube
- * player. The rule also applies to youtubei (InnerTube) JSON calls.
+ * InnerTube answers CORS preflights with 400, so the page sends "simple"
+ * text/plain requests; these rules supply the headers YouTube expects and
+ * expose the response to the page.
  *
- * Rule 2: add permissive CORS response headers so `<audio crossorigin>` and
- * page fetch() can read YouTube responses. `Expose-Headers` is required for
- * range/Content-Length handling and for reading content types.
+ * Rule 1/2: Origin, Referer and X-Origin on InnerTube calls, as the YouTube
+ * web clients send them. Scoped to /youtubei/ on purpose: www.youtube.com's
+ * BotGuard endpoint (/api/jnn) refuses a rewritten Origin.
+ *
+ * Rule 3: permissive CORS response headers on YouTube/Google Video hosts.
+ * `Expose-Headers` is required for range/Content-Length handling.
+ *
+ * Rule 4: googlevideo as the YouTube origin. Rule 5 overrides it for direct
+ * VISIONOS URLs, which are refused (403 mid-track) when they carry a web
+ * Origin — those are fetched with no Origin/Referer at all.
  */
 const DNR_RULES = [
   {
-    id: RULE_IDS.requestHeaders,
+    id: RULE_IDS.innertubeWww,
+    priority: 1,
+    action: {
+      type: 'modifyHeaders',
+      requestHeaders: [
+        { header: 'Origin', operation: 'set', value: 'https://www.youtube.com' },
+        { header: 'Referer', operation: 'set', value: 'https://www.youtube.com/' },
+        { header: 'X-Origin', operation: 'set', value: 'https://www.youtube.com' },
+      ],
+    },
+    condition: {
+      urlFilter: '||www.youtube.com/youtubei/',
+      initiatorDomains: SITE_INITIATORS,
+      resourceTypes: ['xmlhttprequest'],
+    },
+  },
+  {
+    id: RULE_IDS.innertubeMusic,
+    priority: 1,
+    action: {
+      type: 'modifyHeaders',
+      requestHeaders: [
+        { header: 'Origin', operation: 'set', value: 'https://music.youtube.com' },
+        { header: 'Referer', operation: 'set', value: 'https://music.youtube.com/' },
+        { header: 'X-Origin', operation: 'set', value: 'https://music.youtube.com' },
+      ],
+    },
+    condition: {
+      urlFilter: '||music.youtube.com/youtubei/',
+      initiatorDomains: SITE_INITIATORS,
+      resourceTypes: ['xmlhttprequest'],
+    },
+  },
+  {
+    id: RULE_IDS.corsResponse,
+    priority: 1,
+    action: {
+      type: 'modifyHeaders',
+      responseHeaders: [
+        { header: 'Access-Control-Allow-Origin', operation: 'set', value: '*' },
+        { header: 'Access-Control-Expose-Headers', operation: 'set', value: '*' },
+        { header: 'Access-Control-Allow-Headers', operation: 'set', value: '*' },
+        { header: 'Access-Control-Allow-Methods', operation: 'set', value: 'GET, HEAD, POST, OPTIONS' },
+      ],
+    },
+    condition: {
+      requestDomains: [...REWRITE_DOMAINS, 'googleusercontent.com'],
+      initiatorDomains: SITE_INITIATORS,
+      resourceTypes: ['xmlhttprequest', 'media', 'other'],
+    },
+  },
+  {
+    id: RULE_IDS.googlevideoHeaders,
     priority: 1,
     action: {
       type: 'modifyHeaders',
@@ -89,29 +157,25 @@ const DNR_RULES = [
       ],
     },
     condition: {
-      requestDomains: REWRITE_DOMAINS,
-      resourceTypes: ['xmlhttprequest', 'media', 'other'],
+      urlFilter: '||googlevideo.com/',
+      initiatorDomains: SITE_INITIATORS,
+      resourceTypes: ['xmlhttprequest', 'media'],
     },
   },
   {
-    id: RULE_IDS.responseHeaders,
-    priority: 1,
+    id: RULE_IDS.visionosNoOrigin,
+    priority: 2,
     action: {
       type: 'modifyHeaders',
-      responseHeaders: [
-        { header: 'Access-Control-Allow-Origin', operation: 'set', value: '*' },
-        {
-          header: 'Access-Control-Expose-Headers',
-          operation: 'set',
-          value: 'Content-Length, Content-Range, Content-Type, Accept-Ranges, X-Loudness-Db',
-        },
-        { header: 'Access-Control-Allow-Headers', operation: 'set', value: '*' },
-        { header: 'Access-Control-Allow-Methods', operation: 'set', value: 'GET, HEAD, POST, OPTIONS' },
+      requestHeaders: [
+        { header: 'Origin', operation: 'remove' },
+        { header: 'Referer', operation: 'remove' },
       ],
     },
     condition: {
-      requestDomains: REWRITE_DOMAINS,
-      resourceTypes: ['xmlhttprequest', 'media', 'other'],
+      urlFilter: '||googlevideo.com/*c=VISIONOS',
+      initiatorDomains: SITE_INITIATORS,
+      resourceTypes: ['xmlhttprequest', 'media'],
     },
   },
 ];

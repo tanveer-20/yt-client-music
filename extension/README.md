@@ -4,18 +4,24 @@ A tiny, dependency-free companion extension for the Rem web player. It is the
 W6 foundation: header rewriting, a page bridge, and a credentialed fetch helper
 for YouTube InnerTube/Google Video hosts.
 
-> **Status:** foundation only. This build does **not** implement SABR/UMP, PO
-> tokens, Shaka playback or signed-in InnerTube calls yet. Rem still falls back
-> to the server audio proxy. See [Limitations](#limitations).
+> **Status:** browser-direct playback is implemented. The page asks YouTube for
+> a VISIONOS player response and plays the audio-only `googlevideo` URL from
+> your own IP, with no server proxy. SABR/UMP, BotGuard PO tokens and
+> signed-in InnerTube calls are still to come. See [Limitations](#limitations).
 
 ## What it does
 
 1. **Header rewriting (declarativeNetRequest)**
-   - Sets `Origin: https://www.youtube.com` and `Referer: https://www.youtube.com/`
-     on requests to YouTube, YouTubei and Google Video hosts.
+   - Scoped to Rem's origins (`initiatorDomains`), so YouTube's own tabs and
+     every other site are untouched.
+   - Sets `Origin`/`Referer`/`X-Origin` on `www.youtube.com/youtubei/` and
+     `music.youtube.com/youtubei/` calls, and on `googlevideo.com` media.
+   - Removes `Origin`/`Referer` from `c=VISIONOS` direct URLs: those are refused
+     with 403 mid-track when they carry a web origin.
    - Adds `Access-Control-Allow-Origin: *` and `Access-Control-Expose-Headers`
-     on responses from those hosts, so `<audio crossorigin="anonymous">` and
-     `fetch()` can read them.
+     on responses from YouTube/Google Video hosts, so the page can read them.
+   - Deliberately does **not** rewrite `www.youtube.com/api/jnn` (BotGuard):
+     that endpoint refuses a rewritten Origin.
 2. **Page bridge (content script)**
    - Injected on Rem origins at `document_start`.
    - Marks `<html data-rem-extension="1">`, fires `rem:extension-ready`, and
@@ -29,7 +35,8 @@ for YouTube InnerTube/Google Video hosts.
      shared contract and currently return an `unsupported` error.
 
 The extension never proxies audio bytes. Audio is streamed directly by the
-browser from Google Video; the Rem server only resolves the URL.
+browser from Google Video; the Rem server is not involved in playback when the
+extension is present.
 
 ## Install — Chrome / Edge (unpacked)
 
@@ -92,11 +99,13 @@ changes.
 
 ## Limitations
 
-- **No SABR/UMP, PO tokens, BotGuard, Shaka, or signed-in InnerTube yet.** The
-  direct resolver returns a progressive `googlevideo` URL from yt-dlp; it does
-  not create a SABR session.
-- **No audio byte proxying.** If a direct URL cannot be resolved (yt-dlp
-  missing/offline, age gate, 403, etc.), Rem must use the server stream proxy.
+- **No SABR/UMP, BotGuard or PO tokens yet.** Playback uses VISIONOS, which
+  returns plain deciphered audio URLs and needs no token. The web clients
+  (`YTMUSIC`, `WEB`, `MWEB`) only offer SABR and require a PO token, so they are
+  not attempted yet.
+- **No audio byte proxying.** If a direct URL cannot be resolved (age gate,
+  region block, 403, extension missing), Rem falls back to the server stream
+  proxy.
 - **CORS is permissive by design.** The extension sets
   `Access-Control-Allow-Origin: *` on YouTube/Google Video responses. This is
   scoped to those hosts, but it means any page can read those responses if the
