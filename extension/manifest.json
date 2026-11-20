@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Rem Companion",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Plays Rem audio directly from YouTube in your browser, with header rewriting and future account features.",
   "permissions": [
     "declarativeNetRequest",
@@ -15,6 +15,7 @@
     "https://*.youtube.com/*",
     "https://*.googlevideo.com/*",
     "https://*.googleusercontent.com/*",
+    "https://rem-mocha.vercel.app/*",
     "http://localhost/*",
     "http://127.0.0.1/*"
   ],
