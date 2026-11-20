@@ -458,7 +458,9 @@ async function getStreamUrlViaInnertube(videoId: string): Promise<StreamResult> 
   for (const client of STREAM_CLIENTS) {
     try {
       const started = Date.now();
-      const info = await yt.getInfo(videoId, { client });
+      // getBasicInfo is the player-only call. getInfo also fetches /next, which
+      // YouTube refuses (403) from datacenter IPs even when /player succeeds.
+      const info = await yt.getBasicInfo(videoId, { client });
       const audio = (info.streaming_data?.adaptive_formats ?? []).filter(
         (format) => format.has_audio && !format.has_video
       );
@@ -657,7 +659,9 @@ export async function diagnosePlayer(
   for (const client of clients) {
     const started = Date.now();
     try {
-      const info = await yt.getInfo(videoId, { client });
+      // Player-only: /next is 403 from datacenter IPs and would hide the fact
+      // that /player worked.
+      const info = await yt.getBasicInfo(videoId, { client });
       const adaptiveAudio = (info.streaming_data?.adaptive_formats ?? [])
         .filter((format) => format.has_audio && !format.has_video)
         .map((format) => format.itag);

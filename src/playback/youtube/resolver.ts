@@ -44,7 +44,9 @@ export async function resolveDirectStream(videoId: string): Promise<DirectStream
 
   for (const client of CLIENTS) {
     try {
-      const info = await yt.getInfo(videoId, { client });
+      // getBasicInfo is player-only. getInfo would also fetch /next, which is
+      // unnecessary for playback and slower.
+      const info = await yt.getBasicInfo(videoId, { client });
       const audio = (info.streaming_data?.adaptive_formats ?? []).filter(
         (format) => format.has_audio && !format.has_video
       );
