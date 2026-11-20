@@ -4,9 +4,14 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import Innertube, { type Types } from 'youtubei.js';
+import Innertube, { Log, type Types } from 'youtubei.js';
 
 const execFileAsync = promisify(execFile);
+
+// youtubei.js 18.3 cannot parse some of VISIONOS's ticket-shelf menus and logs
+// a huge warning (with the whole classdata) for each one. On a 0.1-CPU
+// instance that spam costs real time; keep only genuine errors.
+Log.setLevel(Log.Level.ERROR);
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -402,6 +407,9 @@ export interface StreamResult {
   contentType: string;
   loudnessDb?: number;
   headers?: Record<string, string>;
+  /** Which resolver produced this URL, for diagnostics. */
+  client?: string;
+  itag?: number;
 }
 
 // ─── InnerTube stream resolver ───────────────────────────────
@@ -488,6 +496,8 @@ async function getStreamUrlViaInnertube(videoId: string): Promise<StreamResult> 
         contentType: mime,
         loudnessDb: typeof format.loudness_db === 'number' ? format.loudness_db : undefined,
         headers: {},
+        client,
+        itag: format.itag,
       };
     } catch (error) {
       lastError = error;
@@ -620,4 +630,57 @@ export async function checkYtDlp(): Promise<{ installed: boolean; version?: stri
   } catch {
     return { installed: false };
   }
+}
+
+/**
+ * Ask every InnerTube client for the same track and report what each one
+ * returned. Used to find which clients a datacenter IP is allowed to use and
+ * which of those offer audio-only formats.
+ */
+export async function diagnosePlayer(
+  videoId: string,
+  clients: Array<Types.InnerTubeClient> = STREAM_CLIENTS
+): Promise<
+  Array<{
+    client: string;
+    ok: boolean;
+    ms: number;
+    status?: string;
+    adaptiveAudio?: number[];
+    muxed?: number[];
+    error?: string;
+  }>
+> {
+  const yt = await getStreamClient();
+  const report = [];
+
+  for (const client of clients) {
+    const started = Date.now();
+    try {
+      const info = await yt.getInfo(videoId, { client });
+      const adaptiveAudio = (info.streaming_data?.adaptive_formats ?? [])
+        .filter((format) => format.has_audio && !format.has_video)
+        .map((format) => format.itag);
+      const muxed = (info.streaming_data?.formats ?? [])
+        .filter((format) => format.has_audio)
+        .map((format) => format.itag);
+      report.push({
+        client,
+        ok: true,
+        ms: Date.now() - started,
+        status: info.playability_status?.status,
+        adaptiveAudio,
+        muxed,
+      });
+    } catch (error) {
+      report.push({
+        client,
+        ok: false,
+        ms: Date.now() - started,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return report;
 }

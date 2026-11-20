@@ -7,9 +7,23 @@
  */
 
 import { Router, type Request, type Response } from 'express';
-import { getStreamUrl } from '../services/youtube.js';
+import { diagnosePlayer, getStreamUrl } from '../services/youtube.js';
 
 const router = Router();
+
+router.get('/diag/:videoId', async (req: Request, res: Response): Promise<void> => {
+  const videoId = String(req.params.videoId || '');
+  if (!/^[\w-]{11}$/.test(videoId)) {
+    res.status(400).json({ error: 'Invalid video ID.' });
+    return;
+  }
+
+  res.setHeader('Cache-Control', 'no-store');
+  const requested = typeof req.query.clients === 'string'
+    ? req.query.clients.split(',').map((value) => value.trim()).filter(Boolean)
+    : undefined;
+  res.json(await diagnosePlayer(videoId, requested as never));
+});
 
 router.get('/:videoId', async (req: Request, res: Response): Promise<void> => {
   const videoId = String(req.params.videoId || '');
@@ -29,6 +43,8 @@ router.get('/:videoId', async (req: Request, res: Response): Promise<void> => {
       contentType: stream.contentType,
       loudnessDb: stream.loudnessDb,
       headers: stream.headers || {},
+      client: stream.client,
+      itag: stream.itag,
       expiresAt: Date.now() + 4 * 60 * 60 * 1000,
     });
   } catch (error) {
