@@ -454,6 +454,10 @@ const STREAM_CLIENTS: Array<Types.InnerTubeClient> = [
 async function getStreamUrlViaInnertube(videoId: string): Promise<StreamResult> {
   const yt = await getStreamClient();
   let lastError: unknown = null;
+  // YouTube's player endpoint is usually refused (403) for *every* client from
+  // a blocked IP. Two consecutive 403s mean the IP is blocked, so the remaining
+  // clients would only add ~8s each before the yt-dlp fallback.
+  let forbidden = 0;
 
   for (const client of STREAM_CLIENTS) {
     try {
@@ -505,6 +509,18 @@ async function getStreamUrlViaInnertube(videoId: string): Promise<StreamResult> 
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[stream] ${videoId} InnerTube client ${client} failed: ${message}`);
+
+      if (message.includes('status code 403')) {
+        forbidden += 1;
+        if (forbidden >= 2) {
+          console.warn(
+            `[stream] ${videoId} player endpoint is 403 for this IP; skipping the remaining InnerTube clients`
+          );
+          break;
+        }
+      } else {
+        forbidden = 0;
+      }
     }
   }
 
