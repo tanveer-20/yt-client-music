@@ -49,19 +49,63 @@ extension is present.
    required after installing or updating.
 5. Open Rem → **Settings → Companion extension** and press **Recheck**.
 
-## Install — Firefox (temporary add-on)
+## Install — Firefox desktop / Android
+
+Firefox needs a separate manifest: MV3 event pages use `background.scripts`
+(not `service_worker`), and `declarativeNetRequestWithHostAccess` is Chrome-only.
+Build it with:
+
+```sh
+node extension/build-firefox.mjs
+```
+
+This writes `extension/dist/firefox/` and
+`extension/dist/rem-companion-firefox-<version>.xpi`. The DNR rules and the
+bridge are shared with the Chrome build; the Firefox build was tested on
+Firefox 160.
+
+### Firefox desktop (temporary, for development)
 
 1. Open `about:debugging#/runtime/this-firefox`.
 2. Choose **Load Temporary Add-on…**.
-3. Select `extension/manifest.json` (not the folder).
+3. Select `extension/dist/firefox/manifest.json` (not the folder).
 4. Reload the Rem tab.
 
-Firefox removes temporary add-ons when the browser restarts. The manifest
-includes `browser_specific_settings.gecko` and uses the same MV3 APIs, but
-Firefox's MV3 background implementation has historically used event pages
-rather than service workers. If the extension appears in `about:debugging` but
-requests fail, check the extension's console for background errors and use a
-recent Firefox release. Chrome/Edge is the primary target for this foundation.
+Firefox removes temporary add-ons when the browser restarts. To install it
+permanently, sign the XPI (below) and use **about:addons → gear → Install
+Add-on From File**.
+
+### Firefox Android (signed XPI required)
+
+Firefox for Android 142+ can install a signed XPI from a file. Mozilla does not
+allow unsigned add-ons in the release build.
+
+1. Sign the Firefox package (one-time setup):
+   - Create a free account at <https://addons.mozilla.org/developers/>.
+   - Open **Tools → Manage API Keys** and create a key/secret.
+   - From `extension/`, run:
+
+     ```sh
+     npx web-ext sign \
+       --source-dir=dist/firefox \
+       --artifacts-dir=dist/signed \
+       --channel=unlisted \
+       --api-key=YOUR_KEY \
+       --api-secret=YOUR_SECRET
+     ```
+
+     On Windows you can run `.\sign-firefox.ps1` instead; it prompts for the
+     key/secret. Or upload the XPI at
+     <https://addons.mozilla.org/developers/addon/submit/> and choose
+     **On your own site** (unlisted), then download the signed file.
+2. Copy the signed `.xpi` to the phone (email, Drive, USB, etc.).
+3. In Firefox Android: **Settings → About Firefox**, tap the Firefox logo five
+   times to unlock developer options, go back to **Settings → Install extension
+   from file**, select the XPI, and confirm **Add**.
+4. Open Rem → **Settings → Companion extension** and press **Recheck**.
+
+The extension ID is `companion@rem-mocha.vercel.app`; sign every new version
+with the same ID so updates replace the installed copy.
 
 > Match patterns cannot include ports. `http://localhost/*` and
 > `http://127.0.0.1/*` therefore match every local dev port, including Vite's
@@ -93,7 +137,7 @@ changes.
 
 | Permission | Why |
 |---|---|
-| `declarativeNetRequest`, `declarativeNetRequestWithHostAccess` | Rewrite `Origin`/`Referer` and add CORS response headers. |
+| `declarativeNetRequest` (Chrome also uses `declarativeNetRequestWithHostAccess`) | Rewrite `Origin`/`Referer` and add CORS response headers. |
 | `cookies` | Detect whether a YouTube session exists. No cookie values leave the browser. |
 | `storage` | Reserved for cached visitor data / bridge settings. |
 | `scripting`, `activeTab` | Reserved for future integration capture flows. |
@@ -113,7 +157,10 @@ changes.
   scoped to those hosts, but it means any page can read those responses if the
   extension is installed (the content script itself is only injected into
   Rem).
-- **Firefox support is best-effort.** Load-unpacked Chrome/Edge is the tested
-  path for this foundation.
+- **Firefox requires a signed XPI.** The Firefox build (140+ desktop, 142+
+  Android) uses `background.scripts` and drops the Chrome-only permission; the
+  DNR rules are shared. Desktop Firefox 160 was tested with direct playback.
+  Firefox Android additionally requires Mozilla signing — see the install
+  section above.
 - Install/update of an unpacked extension requires reloading the Rem tab
   before detection succeeds.

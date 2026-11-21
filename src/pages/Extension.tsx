@@ -11,7 +11,7 @@ export default function ExtensionPage() {
         <h1 className="t-large-title">Companion extension</h1>
         <p className="t-callout t-secondary mt-1">
           A small MV3 extension adds the browser headers and CORS response headers YouTube expects,
-          enabling direct audio playback on desktop.
+          enabling direct audio playback in Chromium and Firefox.
         </p>
       </header>
 
@@ -51,15 +51,26 @@ export default function ExtensionPage() {
             unpacked”, and select the <code>extension/</code> folder in this repository.
           </li>
           <li>
-            Firefox: open <code>about:debugging#/runtime/this-firefox</code>, choose “Load Temporary
-            Add-on”, and select <code>extension/manifest.json</code>.
+            Firefox desktop: run <code>node extension/build-firefox.mjs</code>, then open{' '}
+            <code>about:debugging#/runtime/this-firefox</code>, choose “Load Temporary Add-on”, and
+            select <code>extension/dist/firefox/manifest.json</code>.
           </li>
           <li>
-            After updating the extension files, click <strong>Reload</strong> on{' '}
+            Firefox Android: install the signed Firefox XPI via{' '}
+            <strong>Settings → About Firefox</strong> (tap the logo five times), then{' '}
+            <strong>Settings → Install extension from file</strong>. See{' '}
+            <code>extension/README.md</code> for the one-time signing steps.
+          </li>
+          <li>
+            After updating the Chrome extension files, click <strong>Reload</strong> on{' '}
             <code>chrome://extensions</code> so the new rules and permissions take effect.
           </li>
           <li>Reload Rem, then press Recheck above.</li>
         </ol>
+        <p className="t-footnote t-secondary mt-3">
+          Firefox needs the separate Firefox build (140+ desktop, 142+ Android). Chrome/Edge and
+          Firefox share the same bridge and header rules.
+        </p>
       </section>
 
       <section className="rounded-xl border border-[var(--labelDivider)] p-5 mt-4">
