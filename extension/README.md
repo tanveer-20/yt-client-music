@@ -43,8 +43,10 @@ extension is present.
 1. Open `chrome://extensions` (or `edge://extensions`).
 2. Turn on **Developer mode**.
 3. Choose **Load unpacked** and select this `extension/` folder.
-4. Reload the Rem tab. The extension injects its content script only on page
-   load, so a reload is required after installing or updating.
+4. After updating the extension files, click **Reload** on the extension card
+   (Chrome may ask you to approve the site permission again). Then reload the
+   Rem tab. The content script only injects on page load, so a reload is
+   required after installing or updating.
 5. Open Rem → **Settings → Companion extension** and press **Recheck**.
 
 ## Install — Firefox (temporary add-on)

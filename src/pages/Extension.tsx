@@ -54,6 +54,10 @@ export default function ExtensionPage() {
             Firefox: open <code>about:debugging#/runtime/this-firefox</code>, choose “Load Temporary
             Add-on”, and select <code>extension/manifest.json</code>.
           </li>
+          <li>
+            After updating the extension files, click <strong>Reload</strong> on{' '}
+            <code>chrome://extensions</code> so the new rules and permissions take effect.
+          </li>
           <li>Reload Rem, then press Recheck above.</li>
         </ol>
       </section>
