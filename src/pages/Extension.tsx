@@ -84,9 +84,10 @@ export default function ExtensionPage() {
           tab; nothing is proxied through your PC or the cloud server.
         </p>
         <p className="t-footnote mt-3" style={{ color: 'var(--systemOrange)' }}>
-          Playback uses YouTube's VISIONOS client, which returns plain audio URLs and needs no PO
-          token. Rem falls back to its server proxy automatically when the extension is not
-          present.
+          The extension is optional. Without it, Rem tries the cloud resolver and then plays
+          through YouTube's own embedded player, so audio still comes from your IP. Direct
+          playback is faster and keeps crossfade available; the embedded player has no crossfade
+          and may pause when the screen locks.
         </p>
       </section>
     </div>

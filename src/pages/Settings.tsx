@@ -229,8 +229,8 @@ export default function SettingsPage() {
           <label className="block">
             <span className="t-body-em">Proxy server URL</span>
             <span className="block t-footnote t-secondary mt-0.5">
-              Leave empty to use the local proxy (web) or the built-in deployment (Android). Use
-              your computer's LAN address on the phone, for example http://192.168.1.20:3001.
+              Leave empty to use the built-in cloud API and direct resolver. Set this only when
+              you run your own Rem server, for example http://192.168.1.20:3001.
             </span>
             <div className="mt-2 flex gap-2">
               <input
@@ -302,8 +302,9 @@ export default function SettingsPage() {
             About Rem
           </h2>
           <p className="t-callout t-secondary mt-2">
-            Rem is an Apple Music-inspired YouTube Music client. Playback uses a local yt-dlp proxy
-            with a dual-deck crossfade engine. Built as a clean-room reimplementation.
+            Rem is an Apple Music-inspired YouTube Music client. Playback streams directly from
+            YouTube with the companion extension, and falls back to YouTube's own player when it
+            is not installed. Built as a clean-room reimplementation.
           </p>
           <p className="t-footnote t-tertiary mt-2">Version 2.0.0 · rewrite branch</p>
         </section>

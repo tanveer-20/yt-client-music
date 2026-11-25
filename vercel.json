@@ -13,10 +13,19 @@
       "destination": "/api/suggestions?id=:id"
     },
     {
+      "source": "/api/direct/:id",
+      "destination": "/api/direct?id=:id"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ],
+  "functions": {
+    "api/direct.js": {
+      "maxDuration": 30
+    }
+  },
   "headers": [
     {
       "source": "/api/(.*)",
