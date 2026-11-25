@@ -2,8 +2,11 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from 'react-router-dom';
 import { queryClient } from '@/lib/queryClient';
 import { router } from '@/routes';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function App() {
+  useTheme();
+
   return (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />

@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Keyboard, Play, Server, SlidersHorizontal, XCircle } from 'lucide-react';
-import { useSettingsStore, type Quality } from '@/state/settings';
+import {
+  CheckCircle2,
+  Keyboard,
+  Play,
+  Server,
+  SlidersHorizontal,
+  SunMoon,
+  XCircle,
+} from 'lucide-react';
+import { useSettingsStore, type Quality, type Theme } from '@/state/settings';
 import { useAutomixStore } from '@/playback/automix';
 import { checkHealth } from '@/data/music/api';
 import { NerdStats } from '@/shell/NerdStats';
@@ -100,6 +108,12 @@ export default function SettingsPage() {
     { id: 'medium', label: 'Medium' },
   ];
 
+  const themes: Array<{ id: Theme; label: string }> = [
+    { id: 'system', label: 'System' },
+    { id: 'light', label: 'Light' },
+    { id: 'dark', label: 'Dark' },
+  ];
+
   return (
     <div className="page max-w-[760px]">
       <header className="mb-5">
@@ -108,6 +122,40 @@ export default function SettingsPage() {
       </header>
 
       <div className="flex flex-col gap-4">
+        <Section title="Appearance" icon={<SunMoon size={17} />}>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="t-body-em">Theme</div>
+              <div className="t-footnote t-secondary">
+                Follow your device, or lock Rem to light or dark.
+              </div>
+            </div>
+            <div
+              className="row gap-1 rounded-full p-1"
+              style={{ background: 'var(--segmentedControlBG)' }}
+              role="group"
+              aria-label="Theme"
+            >
+              {themes.map((theme) => (
+                <button
+                  key={theme.id}
+                  type="button"
+                  className="rounded-full px-3 py-1 t-callout-em"
+                  style={
+                    settings.theme === theme.id
+                      ? { background: 'var(--segmentedControlSelectedBG)' }
+                      : { color: 'var(--systemSecondary)' }
+                  }
+                  aria-pressed={settings.theme === theme.id}
+                  onClick={() => settings.setTheme(theme.id)}
+                >
+                  {theme.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Section>
+
         <Section title="Playback" icon={<Play size={17} />}>
           <div>
             <div className="flex justify-between t-body-em">

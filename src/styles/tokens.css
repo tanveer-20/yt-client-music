@@ -1,7 +1,8 @@
 /*
  * Rem design tokens — Apple Music-derived measurements.
  * Re-derived for this project from the target web player's DOM research.
- * Light first, dark under prefers-color-scheme.
+ * Light by default. The stored theme (or the OS preference for "system")
+ * sets data-theme on <html> before first paint.
  */
 
 :root {
@@ -144,83 +145,79 @@
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
+:root[data-theme='dark'] {
+  color-scheme: dark;
 
-    --pageBG: #1f1f1f;
-    --pageBG-rgb: 31, 31, 31;
+  --pageBG: #1f1f1f;
+  --pageBG-rgb: 31, 31, 31;
 
-    --systemPrimary: #ffffffeb;
-    --systemSecondary: #ffffffa3;
-    --systemTertiary: #ffffff66;
-    --systemQuaternary: #ffffff1a;
-    --systemQuinary: #ffffff0d;
+  --systemPrimary: #ffffffeb;
+  --systemSecondary: #ffffffa3;
+  --systemTertiary: #ffffff66;
+  --systemQuaternary: #ffffff1a;
+  --systemQuinary: #ffffff0d;
 
-    --keyColor: #fa586a;
-    --keyColor-rgb: 250, 88, 106;
-    --keyColor-rollover: #ff5f7a;
-    --keyColor-pressed: #ff4661;
-    --keyColorBG: #fa233b;
-    --selectionColor: #c11b2e;
+  --keyColor: #fa586a;
+  --keyColor-rgb: 250, 88, 106;
+  --keyColor-rollover: #ff5f7a;
+  --keyColor-pressed: #ff4661;
+  --keyColorBG: #fa233b;
+  --selectionColor: #c11b2e;
 
-    --systemRed: #ff453a;
-    --systemGreen: #32d74b;
-    --systemBlue: #0a84ff;
-    --systemGray: #98989d;
-    --systemGray2: #636366;
-    --systemGray3: #48484a;
-    --systemGray4: #3a3a3c;
-    --systemGray5: #2c2c2e;
-    --systemGray6: #1c1c1e;
+  --systemRed: #ff453a;
+  --systemGreen: #32d74b;
+  --systemBlue: #0a84ff;
+  --systemGray: #98989d;
+  --systemGray2: #636366;
+  --systemGray3: #48484a;
+  --systemGray4: #3a3a3c;
+  --systemGray5: #2c2c2e;
+  --systemGray6: #1c1c1e;
 
-    --labelDivider: #ffffff1a;
-    --vibrantDivider: #ebebf530;
+  --labelDivider: #ffffff1a;
+  --vibrantDivider: #ebebf530;
 
-    --glassMaterialBackground: #26262899;
-    --glassMaterialShadowColor: #00000033;
-    --glassMaterialInnerStroke: #ffffff;
-    --glassMaterialInnerStrokeAlpha: 0.25;
+  --glassMaterialBackground: #26262899;
+  --glassMaterialShadowColor: #00000033;
+  --glassMaterialInnerStroke: #ffffff;
+  --glassMaterialInnerStrokeAlpha: 0.25;
 
-    --systemStandardThinMaterial: #28282880;
-    --systemStandardThickMaterial: #282828b3;
-    --systemHeaderMaterial: #1e1e1ecc;
+  --systemStandardThinMaterial: #28282880;
+  --systemStandardThickMaterial: #282828b3;
+  --systemHeaderMaterial: #1e1e1ecc;
 
-    --navSidebarSelectedState: #ffffff0d;
-    --tracklistHoverColor: #ffffff0f;
-    --shelfBG: #ffffff0d;
-    --opaqueShelfBG: #2b2b2b;
-    --footerBg: #323232;
-    --genericJoeColor: #323232;
-    --searchBarBorderColor: #ffffff26;
-    --segmentedControlBG: #7676803d;
-    --segmentedControlSelectedBG: #636366;
-    --button-pill-color: #000000;
-    --button-pill-background-color: #ffffff;
-    --radiosityShadowColor: #0000004d;
-    --dialogShadowColor: #0000008c;
+  --navSidebarSelectedState: #ffffff0d;
+  --tracklistHoverColor: #ffffff0f;
+  --shelfBG: #ffffff0d;
+  --opaqueShelfBG: #2b2b2b;
+  --footerBg: #323232;
+  --genericJoeColor: #323232;
+  --searchBarBorderColor: #ffffff26;
+  --segmentedControlBG: #7676803d;
+  --segmentedControlSelectedBG: #636366;
+  --button-pill-color: #000000;
+  --button-pill-background-color: #ffffff;
+  --radiosityShadowColor: #0000004d;
+  --dialogShadowColor: #0000008c;
 
-    --containerInnerStroke: #ffffff;
-    --containerInnerStrokeAlpha: 0.25;
+  --containerInnerStroke: #ffffff;
+  --containerInnerStrokeAlpha: 0.25;
 
-    --skeleton-fill: #ffffff12;
-    --skeleton-shimmer: #ffffff14;
+  --skeleton-fill: #ffffff12;
+  --skeleton-shimmer: #ffffff14;
 
-    --page-tint: #1c1c1e;
-  }
+  --page-tint: #1c1c1e;
 }
 
 @media (prefers-contrast: more) {
-  :root {
+  :root:not([data-theme='dark']) {
     --glassMaterialBackground: #f2f2f2;
     --glassMaterialBackdropFilter: none;
     --systemSecondary: #000000c2;
     --labelDivider: #0000004d;
   }
-}
 
-@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
-  :root {
+  :root[data-theme='dark'] {
     --glassMaterialBackground: #0e0e0e;
     --systemSecondary: #ffffffb3;
     --labelDivider: #ffffff4d;
