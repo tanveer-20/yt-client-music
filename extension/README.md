@@ -8,6 +8,12 @@ for YouTube InnerTube/Google Video hosts.
 > a VISIONOS player response and plays the audio-only `googlevideo` URL from
 > your own IP, with no server proxy. SABR/UMP, BotGuard PO tokens and
 > signed-in InnerTube calls are still to come. See [Limitations](#limitations).
+>
+> **The extension is optional.** Without it, Rem asks the hosted resolver for a
+> direct URL and otherwise plays through YouTube's own embedded player. Direct
+> playback is faster, supports crossfade, and keeps audio alive more reliably
+> when the screen locks; the embedded player has no crossfade and may pause in
+> the background.
 
 ## What it does
 
@@ -150,8 +156,10 @@ changes.
   (`YTMUSIC`, `WEB`, `MWEB`) only offer SABR and require a PO token, so they are
   not attempted yet.
 - **No audio byte proxying.** If a direct URL cannot be resolved (age gate,
-  region block, 403, extension missing), Rem falls back to the server stream
-  proxy.
+  region block, 403, bot check), Rem asks the hosted resolver once more and
+  then falls back to YouTube's embedded player, which resolves from the
+  listener's own address. Addon and Listen Together tracks still stream
+  through the Rem server.
 - **CORS is permissive by design.** The extension sets
   `Access-Control-Allow-Origin: *` on YouTube/Google Video responses. This is
   scoped to those hosts, but it means any page can read those responses if the

@@ -1,12 +1,12 @@
 # Product Context: Rem
 
 ## Overview
-A high-performance YouTube Music audio streaming client and web/mobile application built with React, Vite, Tailwind CSS, and Capacitor (for Android), backed by an Express audio proxy service leveraging `yt-dlp`.
+A high-performance YouTube Music audio streaming client and web/mobile application built with React, Vite, Tailwind CSS, and Capacitor (for Android), backed by a hosted search/catalog API and direct YouTube playback.
 
 ## Platform
 - **Target**: Adaptive (`web` desktop & mobile, plus Capacitor `android` APK wrapper)
 - **Engine**: React 19 + Vite 6 + Tailwind CSS v3
-- **Audio Pipeline**: Express proxy server (`localhost:3001`), streaming 256kbps AAC YouTube audio via `yt-dlp`
+- **Audio Pipeline**: Direct `googlevideo` streaming from the listener's IP via the optional companion extension or the hosted resolver; YouTube's embedded player is the no-extension fallback. Search and catalog come from the cloud API.
 
 ## Core Users & Jobs-to-be-Done
 - **Primary Audience**: Music listeners looking for an ad-free, high-fidelity, distraction-free player with seamless desktop and mobile ergonomics.
