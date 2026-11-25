@@ -167,8 +167,22 @@ a {
   padding: 22px 16px calc(var(--player-pill-height) + var(--player-bottom-offset) + 24px);
   border-right: 1px solid var(--labelDivider);
   background: color-mix(in srgb, var(--pageBG) 82%, var(--page-tint));
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
   z-index: 10;
+}
+
+.sidebar:hover {
+  scrollbar-color: color-mix(in srgb, var(--systemPrimary) 20%, transparent) transparent;
+}
+
+/* Keep every section at its natural height so a short viewport scrolls
+   instead of compressing the navigation and clipping Settings. */
+.sidebar > * {
+  flex-shrink: 0;
 }
 
 @media (min-width: 768px) {
