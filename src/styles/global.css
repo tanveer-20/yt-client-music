@@ -170,13 +170,12 @@ a {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
+  scrollbar-width: none;
   z-index: 10;
 }
 
-.sidebar:hover {
-  scrollbar-color: color-mix(in srgb, var(--systemPrimary) 20%, transparent) transparent;
+.sidebar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Keep every section at its natural height so a short viewport scrolls
