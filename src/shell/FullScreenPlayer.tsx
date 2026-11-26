@@ -14,7 +14,8 @@ import { VolumeControl } from './VolumeControl';
 export function FullScreenPlayer() {
   const open = useUIStore((s) => s.fullScreenOpen);
   const close = useUIStore((s) => s.closeFullScreen);
-  const setPanel = useUIStore((s) => s.setPanel);
+  const panel = useUIStore((s) => s.panel);
+  const togglePanel = useUIStore((s) => s.togglePanel);
   const rootRef = useRef<HTMLDivElement>(null);
   useFocusTrap(open, rootRef);
 
@@ -50,6 +51,7 @@ export function FullScreenPlayer() {
       ref={rootRef}
       className="fullscreen"
       data-full-screen
+      data-panel={panel ?? undefined}
       role="dialog"
       aria-modal="true"
       aria-label="Now playing"
@@ -64,18 +66,20 @@ export function FullScreenPlayer() {
           <button
             type="button"
             className="icon-btn"
-            onClick={() => setPanel('lyrics')}
+            onClick={() => togglePanel('lyrics')}
             aria-label="Lyrics"
-            style={{ color: 'inherit' }}
+            aria-pressed={panel === 'lyrics'}
+            style={{ color: panel === 'lyrics' ? 'var(--keyColor)' : 'inherit' }}
           >
             <Mic2 size={18} />
           </button>
           <button
             type="button"
             className="icon-btn"
-            onClick={() => setPanel('queue')}
+            onClick={() => togglePanel('queue')}
             aria-label="Up next"
-            style={{ color: 'inherit' }}
+            aria-pressed={panel === 'queue'}
+            style={{ color: panel === 'queue' ? 'var(--keyColor)' : 'inherit' }}
           >
             <ListMusic size={18} />
           </button>

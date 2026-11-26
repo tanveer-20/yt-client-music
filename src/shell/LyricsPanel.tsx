@@ -8,6 +8,7 @@ import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 export function LyricsPanel() {
   const panel = useUIStore((s) => s.panel);
+  const fullScreenOpen = useUIStore((s) => s.fullScreenOpen);
   const closePanel = useUIStore((s) => s.closePanel);
   const panelRef = useRef<HTMLElement>(null);
   useFocusTrap(panel === 'lyrics', panelRef);
@@ -38,7 +39,7 @@ export function LyricsPanel() {
   if (panel !== 'lyrics') return null;
 
   return (
-    <aside ref={panelRef} className="side-panel" role="dialog" aria-modal="true" aria-label="Lyrics">
+    <aside ref={panelRef} className="side-panel" role="dialog" aria-modal="true" aria-label="Lyrics" data-over-fullscreen={fullScreenOpen || undefined}>
       <div className="panel-head">
         <div>
           <div className="panel-title">Lyrics</div>

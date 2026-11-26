@@ -867,7 +867,15 @@ input[type='range'].slider::-moz-range-thumb {
   color: var(--systemPrimary-onDark);
   background: #111;
   overflow: hidden;
+  transition: right var(--duration-panel) var(--ease-out-panel);
   animation: fs-in 0.32s var(--ease-out-panel);
+}
+
+/* Leave room for an open side panel instead of covering the player controls. */
+@media (min-width: 768px) {
+  .fullscreen[data-panel] {
+    right: var(--side-panel-width);
+  }
 }
 
 @keyframes fs-in {
@@ -913,10 +921,16 @@ input[type='range'].slider::-moz-range-thumb {
 
 @media (max-width: 900px) {
   .fullscreen-body {
-    grid-template-columns: 1fr;
-    padding: 0 6vw;
-    align-content: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 6vw 24px;
+    overflow-y: auto;
     gap: 30px;
+  }
+
+  .fullscreen-body > * {
+    flex-shrink: 0;
   }
 }
 
@@ -979,6 +993,35 @@ input[type='range'].slider::-moz-range-thumb {
   border-left: 1px solid var(--labelDivider);
   box-shadow: -20px 0 60px -20px rgba(0, 0, 0, 0.4);
   animation: panel-in var(--duration-panel) var(--ease-out-panel);
+}
+
+/* When the full-screen player is open, the panel sits above it instead of
+   replacing it, so opening lyrics or the queue never stops playback. */
+.side-panel[data-over-fullscreen] {
+  --systemPrimary: var(--systemPrimary-onDark);
+  --systemSecondary: var(--systemSecondary-onDark);
+  --systemTertiary: var(--systemTertiary-onDark);
+  --systemQuaternary: #ffffff1a;
+  --systemQuinary: #ffffff0d;
+  --labelDivider: #ffffff1a;
+  --tracklistHoverColor: #ffffff0f;
+  z-index: calc(var(--z-modal) + 1);
+  background: #151517;
+  color: var(--systemPrimary-onDark);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-left-color: #ffffff1a;
+}
+
+.side-panel[data-over-fullscreen] .lyrics-scroll,
+.side-panel[data-over-fullscreen] .panel-scroll {
+  padding-bottom: 48px;
+}
+
+@media (max-width: 767px) {
+  .side-panel[data-over-fullscreen] {
+    width: 100vw;
+  }
 }
 
 @keyframes panel-in {

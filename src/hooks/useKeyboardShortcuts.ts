@@ -61,8 +61,8 @@ export function useKeyboardShortcuts(): void {
           ui.toggleFullScreen();
           break;
         case 'Escape':
-          if (ui.fullScreenOpen) ui.closeFullScreen();
-          else if (ui.panel) ui.closePanel();
+          if (ui.panel) ui.closePanel();
+          else if (ui.fullScreenOpen) ui.closeFullScreen();
           break;
         default:
           break;

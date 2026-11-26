@@ -9,6 +9,7 @@ import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 export function UpNext() {
   const panel = useUIStore((s) => s.panel);
+  const fullScreenOpen = useUIStore((s) => s.fullScreenOpen);
   const panelRef = useRef<HTMLElement>(null);
   useFocusTrap(panel === 'queue', panelRef);
 
@@ -24,7 +25,7 @@ export function UpNext() {
   if (panel !== 'queue') return null;
 
   return (
-    <aside ref={panelRef} className="side-panel" role="dialog" aria-modal="true" aria-label="Up next">
+    <aside ref={panelRef} className="side-panel" role="dialog" aria-modal="true" aria-label="Up next" data-over-fullscreen={fullScreenOpen || undefined}>
       <div className="panel-head">
         <div>
           <div className="panel-title">Up Next</div>

@@ -20,8 +20,7 @@ export const useUIStore = create<UIState>()((set) => ({
   closeFullScreen: () => set({ fullScreenOpen: false }),
   toggleFullScreen: () =>
     set((s) => ({ fullScreenOpen: !s.fullScreenOpen, panel: s.fullScreenOpen ? s.panel : null })),
-  setPanel: (panel) => set({ panel, fullScreenOpen: false }),
-  togglePanel: (panel) =>
-    set((s) => ({ panel: s.panel === panel ? null : panel, fullScreenOpen: false })),
+  setPanel: (panel) => set({ panel }),
+  togglePanel: (panel) => set((s) => ({ panel: s.panel === panel ? null : panel })),
   closePanel: () => set({ panel: null }),
 }));
